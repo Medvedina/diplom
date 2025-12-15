@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+
+{% block title %}Настройки - Ansible Control Panel{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item active">Настройки системы</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0"><i class="bi bi-gear me-2"></i>Настройки Ansible</h5>
+                </div>
+                <div class="card-body">
+                    <form id="settingsForm">
+                        <div class="mb-3">
+                            <label class="form-label">Путь к Ansible</label>
+                            <input type="text" class="form-control" value="{{ settings.ansible_path }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Директория инвентарей</label>
+                            <input type="text" class="form-control" value="{{ settings.inventory_path }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Директория плейбуков</label>
+                            <input type="text" class="form-control" value="{{ settings.playbook_path }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Таймаут SSH (секунды)</label>
+                            <input type="number" class="form-control" value="{{ settings.ssh_timeout }}">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Интервал проверки хостов (секунды)</label>
+                            <input type="number" class="form-control" value="{{ settings.check_interval }}">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" {% if settings.notifications %}checked{% endif %}>
+                                <label class="form-check-label">Включить уведомления</label>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Сохранить настройки</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Информация о системе</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Версия Flask:</span>
+                            <span class="text-muted">2.3.0</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Версия Python:</span>
+                            <span class="text-muted">3.9+</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Инвентарей:</span>
+                            <span class="text-muted">{{ list_inventories()|length }}</span>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Хостов всего:</span>
+                            <span class="text-muted">42</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

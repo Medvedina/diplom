@@ -1,0 +1,819 @@
+{% extends "base.html" %}
+
+{% block title %}Инвентари - Ansible Control Panel{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item active">Список инвентарей</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Заголовок и кнопки действий -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="bi bi-router me-2"></i>Инвентари сетевого оборудования
+            </h1>
+            <p class="text-muted mb-0">Управление инвентарными файлами для маршрутизаторов и коммутаторов</p>
+        </div>
+        <div class="btn-group">
+            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createInventoryModal">
+                <i class="bi bi-plus-circle me-1"></i>Создать инвентарь
+            </button>
+            <button type="button" class="btn btn-outline-success" onclick="quickNetworkInventory()">
+                <i class="bi bi-lightning me-1"></i>Быстрый шаблон
+            </button>
+        </div>
+    </div>
+
+    <!-- Карточки инвентарей -->
+    <div class="row">
+        {% for inventory in inventories %}
+        <div class="col-xl-4 col-lg-6 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="d-flex align-items-center mb-2">
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                    <i class="bi bi-folder2-open text-primary me-2"></i>
+                                    {{ inventory.name }}
+                                </div>
+                                <span class="badge bg-info ms-2" title="{{ inventory.modified }}">
+                                    {{ inventory.modified[:10].replace('-', '.') }}
+                                </span>
+                            </div>
+                            
+                            <!-- Статистика оборудования -->
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                        Устройств
+                                    </div>
+                                    <div class="h5 mb-0">
+                                        {% set inv_data = load_inventory(inventory.name) %}
+                                        {% if inv_data and inv_data.all and inv_data.all.children %}
+                                            {% set device_count = 0 %}
+                                            {% set router_count = 0 %}
+                                            {% set switch_count = 0 %}
+                                            {% for group in inv_data.all.children.values() %}
+                                                {% if group.hosts %}
+                                                    {% set device_count = device_count + group.hosts|length %}
+                                                    {% for host_vars in group.hosts.values() %}
+                                                        {% if host_vars.device_type == 'router' %}
+                                                            {% set router_count = router_count + 1 %}
+                                                        {% elif host_vars.device_type == 'switch' %}
+                                                            {% set switch_count = switch_count + 1 %}
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                {% endif %}
+                                            {% endfor %}
+                                            <span class="badge bg-primary rounded-pill">{{ device_count }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary rounded-pill">0</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                        Групп
+                                    </div>
+                                    <div class="h5 mb-0">
+                                        {% if inv_data and inv_data.all and inv_data.all.children %}
+                                            <span class="badge bg-success rounded-pill">{{ inv_data.all.children|length }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary rounded-pill">0</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Типы оборудования -->
+                            {% if router_count > 0 or switch_count > 0 %}
+                            <div class="mb-3">
+                                {% if router_count > 0 %}
+                                    <span class="badge bg-danger me-1">
+                                        <i class="bi bi-router"></i> {{ router_count }} роутеров
+                                    </span>
+                                {% endif %}
+                                {% if switch_count > 0 %}
+                                    <span class="badge bg-warning me-1">
+                                        <i class="bi bi-hdd-stack"></i> {{ switch_count }} коммутаторов
+                                    </span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                            
+                            <div class="small text-muted mb-2">
+                                <i class="bi bi-clock me-1"></i>
+                                Изменен: {{ inventory.modified }}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-diagram-3 fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent border-top-0 pt-0">
+                    <div class="btn-group w-100">
+                        <a href="{{ url_for('inventory.inventory_detail', inventory_name=inventory.name) }}" 
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye me-1"></i>Просмотр
+                        </a>
+                        <button class="btn btn-sm btn-outline-warning" 
+                                onclick="editInventory('{{ inventory.name }}')">
+                            <i class="bi bi-pencil me-1"></i>Редактировать
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" 
+                                onclick="deleteInventory('{{ inventory.name }}')">
+                            <i class="bi bi-trash me-1"></i>Удалить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-router display-1 text-muted mb-3"></i>
+                    <h3 class="text-muted">Инвентари не найдены</h3>
+                    <p class="text-muted mb-4">Создайте первый инвентарь для сетевого оборудования</p>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createInventoryModal">
+                        <i class="bi bi-plus-circle me-1"></i>Создать инвентарь
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Таблица инвентарей -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="bi bi-table me-2"></i>Таблица инвентарей
+            </h6>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" onclick="exportAllInventories()">
+                    <i class="bi bi-download me-1"></i>Экспорт всех
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteSelectedInventories()">
+                    <i class="bi bi-trash me-1"></i>Удалить выбранные
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="inventoryTable">
+                    <thead class="thead-light">
+                        <tr>
+                            <th width="5%">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="selectAll">
+                                </div>
+                            </th>
+                            <th width="20%">Название</th>
+                            <th width="15%">Устройств</th>
+                            <th width="10%">Типы</th>
+                            <th width="15%">Групп</th>
+                            <th width="15%">Последнее изменение</th>
+                            <th width="20%">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for inventory in inventories %}
+                        {% set inv_data = load_inventory(inventory.name) %}
+                        <tr>
+                            <td>
+                                <div class="form-check">
+                                    <input class="form-check-input inventory-checkbox" type="checkbox" 
+                                           value="{{ inventory.name }}">
+                                </div>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <i class="bi bi-folder2 text-info me-2"></i>
+                                    <div>
+                                        <strong>{{ inventory.name }}</strong>
+                                        <br>
+                                        <small class="text-muted">
+                                            <i class="bi bi-file-code"></i> {{ inventory_path }}/{{ inventory.name }}.yaml
+                                        </small>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                {% if inv_data and inv_data.all and inv_data.all.children %}
+                                    {% set device_count = 0 %}
+                                    {% for group in inv_data.all.children.values() %}
+                                        {% if group.hosts %}
+                                            {% set device_count = device_count + group.hosts|length %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    <span class="badge bg-primary">{{ device_count }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if inv_data and inv_data.all and inv_data.all.children %}
+                                    {% set types = [] %}
+                                    {% for group in inv_data.all.children.values() %}
+                                        {% if group.hosts %}
+                                            {% for host_vars in group.hosts.values() %}
+                                                {% if host_vars.device_type and host_vars.device_type not in types %}
+                                                    {% set _ = types.append(host_vars.device_type) %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    {% for type in types[:2] %}
+                                        {% if type == 'router' %}
+                                            <span class="badge bg-danger me-1">R</span>
+                                        {% elif type == 'switch' %}
+                                            <span class="badge bg-warning me-1">S</span>
+                                        {% elif type == 'firewall' %}
+                                            <span class="badge bg-info me-1">FW</span>
+                                        {% endif %}
+                                    {% endfor %}
+                                    {% if types|length > 2 %}
+                                        <span class="badge bg-secondary">+{{ types|length - 2 }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="badge bg-secondary">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if inv_data and inv_data.all and inv_data.all.children %}
+                                    <span class="badge bg-success">{{ inv_data.all.children|length }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ inventory.modified }}</small>
+                            </td>
+                            <td>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-primary dropdown-toggle" 
+                                            type="button" id="dropdownMenuButton-{{ loop.index }}" 
+                                            data-bs-toggle="dropdown" aria-expanded="false">
+                                        <i class="bi bi-three-dots-vertical"></i>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end dropdown-menu-scrollable" 
+                                        aria-labelledby="dropdownMenuButton-{{ loop.index }}">
+                                        <li>
+                                            <a class="dropdown-item" 
+                                            href="{{ url_for('inventory.inventory_detail', inventory_name=inventory.name) }}">
+                                                <i class="bi bi-eye-fill text-primary me-2"></i>
+                                                <span class="fw-medium">Просмотр</span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="{{ url_for('inventory.inventory_edit', inventory_name=inventory.name) }}">
+                                                <i class="bi bi-pencil-fill text-warning me-2"></i>
+                                                <span class="fw-medium">Редактировать</span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="#" 
+                                            onclick="cloneInventory('{{ inventory.name }}')">
+                                                <i class="bi bi-files text-info me-2"></i>
+                                                <span class="fw-medium">Клонировать</span>
+                                            </a>
+                                        </li>
+                                        <li>
+                                            <a class="dropdown-item" href="#" 
+                                            onclick="exportInventory('{{ inventory.name }}')">
+                                                <i class="bi bi-download text-success me-2"></i>
+                                                <span class="fw-medium">Экспорт</span>
+                                            </a>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <a class="dropdown-item text-danger" href="#" 
+                                            onclick="deleteInventory('{{ inventory.name }}')">
+                                                <i class="bi bi-trash-fill me-2"></i>
+                                                <span class="fw-medium">Удалить</span>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно создания инвентаря -->
+<div class="modal fade" id="createInventoryModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-plus-circle me-2"></i>Создать новый инвентарь
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="createInventoryForm">
+                    <div class="mb-3">
+                        <label for="inventoryName" class="form-label">Название инвентаря *</label>
+                        <input type="text" class="form-control" id="inventoryName" 
+                               placeholder="Например: core_routers, campus_switches, edge_devices" required>
+                        <div class="form-text">
+                            Только латинские буквы, цифры и подчеркивания. Пример: moscow_dc, spb_branch
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="inventoryDescription" class="form-label">Описание (необязательно)</label>
+                        <textarea class="form-control" id="inventoryDescription" rows="2" 
+                                  placeholder="Опишите назначение этого инвентаря..."></textarea>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>
+                        Инвентарь будет создан в директории: 
+                        <code>{{ inventory_path }}</code>
+                        <br>
+                        <small class="text-muted">Формат: YAML файл с группами для маршрутизаторов, коммутаторов</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                <button type="button" class="btn btn-primary" onclick="createInventory()">
+                    <i class="bi bi-save me-1"></i>Создать инвентарь
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно редактирования инвентаря -->
+<div class="modal fade" id="editInventoryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-pencil me-2"></i>Редактировать инвентарь
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="editInventoryContent">
+                <!-- Контент будет загружен динамически -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript для управления инвентарями -->
+<script>
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    // Выделение всех чекбоксов
+    document.getElementById('selectAll').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.inventory-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+    });
+});
+
+// Создание инвентаря
+function createInventory() {
+    const name = document.getElementById('inventoryName').value.trim();
+    const description = document.getElementById('inventoryDescription').value.trim();
+    
+    if (!name) {
+        showAlert('Введите название инвентаря', 'warning');
+        return;
+    }
+    
+    if (!/^[a-zA-Z0-9_\-]+$/.test(name)) {
+        showAlert('Название может содержать только буквы, цифры, подчеркивание и дефис', 'error');
+        return;
+    }
+    
+    // Показываем индикатор загрузки
+    const submitBtn = document.querySelector('#createInventoryModal .btn-primary');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Создание...';
+    submitBtn.disabled = true;
+    
+    fetch('/inventory/api/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name: name,
+            description: description
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Инвентарь успешно создан', 'success');
+            $('#createInventoryModal').modal('hide');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showAlert('Ошибка: ' + data.message, 'error');
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
+    })
+    .catch(error => {
+        showAlert('Ошибка сети: ' + error.message, 'error');
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
+    });
+}
+
+// Редактирование инвентаря
+function editInventory(inventoryName) {
+    console.log('Editing inventory:', inventoryName); // Для отладки
+    
+    // Показываем индикатор загрузки
+    showAlert('Загрузка инвентаря...', 'info');
+    
+    fetch(`/inventory/api/get/${encodeURIComponent(inventoryName)}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // Загружаем YAML редактор
+                document.getElementById('editInventoryContent').innerHTML = `
+                    <div class="mb-3">
+                        <h6>Редактирование: ${inventoryName}</h6>
+                        <div class="alert alert-light border">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Последнее изменение: ${data.modified || 'неизвестно'}
+                            </small>
+                        </div>
+                    </div>
+                    <form id="editInventoryForm">
+                        <div class="mb-3">
+                            <label class="form-label">Содержимое YAML файла</label>
+                            <textarea class="form-control font-monospace" id="inventoryYaml" 
+                                      rows="15" style="font-size: 0.875rem;">${escapeHtml(data.content)}</textarea>
+                            <div class="form-text">
+                                Редактируйте содержимое инвентаря в формате YAML
+                            </div>
+                        </div>
+                    </form>
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        Внимание! Неправильный формат YAML может сделать инвентарь нечитаемым
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                        <button type="button" class="btn btn-primary" onclick="saveInventory('${inventoryName}')">
+                            <i class="bi bi-save me-1"></i>Сохранить изменения
+                        </button>
+                        <button type="button" class="btn btn-outline-info" onclick="validateYaml('${inventoryName}')">
+                            <i class="bi bi-check-circle me-1"></i>Проверить синтаксис
+                        </button>
+                    </div>
+                `;
+                
+                // Показываем модальное окно
+                const editModal = new bootstrap.Modal(document.getElementById('editInventoryModal'));
+                editModal.show();
+                
+            } else {
+                showAlert('Ошибка загрузки инвентаря: ' + data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading inventory:', error);
+            showAlert('Ошибка загрузки: ' + error.message, 'error');
+        });
+}
+
+// Вспомогательная функция для экранирования HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Функция сохранения инвентаря
+function saveInventory(inventoryName) {
+    const yamlContent = document.getElementById('inventoryYaml').value;
+    
+    if (!yamlContent.trim()) {
+        showAlert('Инвентарь не может быть пустым', 'warning');
+        return;
+    }
+    
+    // Показываем индикатор сохранения
+    const saveBtn = document.querySelector('#editInventoryModal .btn-primary');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Сохранение...';
+    saveBtn.disabled = true;
+    
+    fetch('/inventory/api/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name: inventoryName,
+            content: yamlContent
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Инвентарь успешно сохранен', 'success');
+            
+            // Закрываем модальное окно через 1 секунду
+            setTimeout(() => {
+                const editModal = bootstrap.Modal.getInstance(document.getElementById('editInventoryModal'));
+                if (editModal) editModal.hide();
+                
+                // Перезагружаем страницу через 1.5 секунды
+                setTimeout(() => window.location.reload(), 1500);
+            }, 1000);
+            
+        } else {
+            showAlert('Ошибка сохранения: ' + data.message, 'error');
+            saveBtn.innerHTML = originalText;
+            saveBtn.disabled = false;
+        }
+    })
+    .catch(error => {
+        showAlert('Ошибка сети: ' + error.message, 'error');
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    });
+}
+
+// Сохранение инвентаря
+function saveInventory(inventoryName) {
+    const yamlContent = document.getElementById('inventoryYaml').value;
+    
+    fetch('/inventory/api/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name: inventoryName,
+            content: yamlContent
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Инвентарь успешно сохранен', 'success');
+            $('#editInventoryModal').modal('hide');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showAlert('Ошибка сохранения: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Ошибка сети: ' + error.message, 'error');
+    });
+}
+
+// Удаление инвентаря
+function deleteInventory(inventoryName) {
+    if (!confirm(`Вы уверены, что хотите удалить инвентарь "${inventoryName}"?`)) {
+        return;
+    }
+    
+    fetch('/inventory/api/delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: inventoryName})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Инвентарь успешно удален', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showAlert('Ошибка: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Ошибка сети: ' + error.message, 'error');
+    });
+}
+
+// Клонирование инвентаря
+function cloneInventory(inventoryName) {
+    const newName = prompt(`Введите новое название для копии инвентаря "${inventoryName}":`, 
+                          `${inventoryName}_copy_${new Date().getTime()}`);
+    
+    if (newName && newName.trim()) {
+        fetch('/inventory/api/clone', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                source: inventoryName,
+                target: newName.trim()
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert('Инвентарь успешно скопирован', 'success');
+                setTimeout(() => window.location.reload(), 1000);
+            } else {
+                showAlert('Ошибка: ' + data.message, 'error');
+            }
+        });
+    }
+}
+
+// Экспорт инвентаря
+function exportInventory(inventoryName) {
+    window.open(`/inventory/api/export/${encodeURIComponent(inventoryName)}`, '_blank');
+}
+
+// Экспорт всех инвентарей
+function exportAllInventories() {
+    const selected = Array.from(document.querySelectorAll('.inventory-checkbox:checked'))
+                         .map(cb => cb.value);
+    
+    if (selected.length === 0) {
+        showAlert('Выберите инвентари для экспорта', 'warning');
+        return;
+    }
+    
+    const params = new URLSearchParams();
+    selected.forEach(name => params.append('inventories', name));
+    
+    window.open(`/inventory/api/export-multiple?${params.toString()}`, '_blank');
+}
+
+// Удаление выбранных инвентарей
+function deleteSelectedInventories() {
+    const selected = Array.from(document.querySelectorAll('.inventory-checkbox:checked'))
+                         .map(cb => cb.value);
+    
+    if (selected.length === 0) {
+        showAlert('Выберите инвентари для удаления', 'warning');
+        return;
+    }
+    
+    if (!confirm(`Удалить ${selected.length} выбранных инвентарей?`)) {
+        return;
+    }
+    
+    fetch('/inventory/api/batch-delete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({inventories: selected})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert(`${selected.length} инвентарей успешно удалены`, 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showAlert('Ошибка: ' + data.message, 'error');
+        }
+    });
+}
+
+// Быстрый шаблон сетевого инвентаря
+function quickNetworkInventory() {
+    document.getElementById('inventoryName').value = 'network_' + new Date().getTime();
+    
+    // Автоматически заполняем шаблоном для сетевого оборудования
+    const templateYaml = `all:
+  vars:
+    ansible_network_os: ios
+    ansible_connection: network_cli
+    ansible_user: admin
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+  
+  children:
+    core_routers:
+      hosts:
+        core-router-01.example.com:
+          ansible_host: 10.0.1.1
+          device_type: router
+          location: "Москва, ЦОД-1"
+        core-router-02.example.com:
+          ansible_host: 10.0.1.2
+          device_type: router
+          location: "Москва, ЦОД-2"
+    
+    distribution_switches:
+      hosts:
+        dist-switch-01.example.com:
+          ansible_host: 10.0.2.1
+          device_type: switch
+          model: "Cisco Catalyst 9300"
+        dist-switch-02.example.com:
+          ansible_host: 10.0.2.2
+          device_type: switch
+          model: "Cisco Catalyst 9300"
+    
+    access_switches:
+      hosts:
+        access-switch-01.example.com:
+          ansible_host: 10.0.3.1
+          device_type: switch
+          ports: 48
+        access-switch-02.example.com:
+          ansible_host: 10.0.3.2
+          device_type: switch
+          ports: 24`;
+    
+    document.getElementById('inventoryDescription').value = 
+        "Автоматически сгенерированный шаблон для сетевого оборудования";
+    
+    showAlert('Шаблон сетевого инвентаря загружен', 'info');
+}
+
+// Проверка YAML
+function validateYaml(inventoryName) {
+    const yamlContent = document.getElementById('inventoryYaml').value;
+    
+    fetch('/inventory/api/validate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name: inventoryName,
+            content: yamlContent
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.valid) {
+            showAlert('YAML синтаксис корректен', 'success');
+        } else {
+            showAlert('Ошибка YAML: ' + data.error, 'error');
+        }
+    });
+}
+
+// Автосохранение черновика
+function autoSaveDraft(inventoryName) {
+    const yamlContent = document.getElementById('inventoryYaml').value;
+    
+    // Сохраняем в localStorage
+    localStorage.setItem(`draft_${inventoryName}`, yamlContent);
+    console.log('Черновик автосохранен');
+}
+
+// Восстановление черновика при загрузке
+function restoreDraft(inventoryName) {
+    const draft = localStorage.getItem(`draft_${inventoryName}`);
+    if (draft && document.getElementById('inventoryYaml')) {
+        document.getElementById('inventoryYaml').value = draft;
+        showAlert('Восстановлен последний черновик', 'info');
+    }
+}
+
+// Утилита для показа уведомлений
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    alertDiv.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="bi ${type === 'success' ? 'bi-check-circle' : 
+                         type === 'error' ? 'bi-x-circle' : 
+                         type === 'warning' ? 'bi-exclamation-triangle' : 
+                         'bi-info-circle'} me-2"></i>
+            <div>${message}</div>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+    document.body.appendChild(alertDiv);
+    setTimeout(() => {
+        if (alertDiv.parentElement) alertDiv.remove();
+    }, 5000);
+}
+</script>
+
+<style>
+/* Стили для YAML редактора */
+.font-monospace {
+    font-family: 'Courier New', monospace;
+}
+
+/* Подсветка строк в таблице */
+#inventoryTable tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+/* Иконки для типов устройств */
+.bi-router { color: #dc3545; }
+.bi-hdd-stack { color: #ffc107; }
+.bi-shield-check { color: #0dcaf0; }
+</style>
+{% endblock %}

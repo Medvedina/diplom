@@ -1,0 +1,686 @@
+{% extends "base.html" %}
+
+{% block title %}Хосты - Ansible Control Panel{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item active">Список хостов</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Заголовок и фильтры -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="bi bi-pc-display-horizontal me-2"></i>Хосты
+            </h1>
+            <p class="text-muted mb-0">Все хосты из всех инвентарей</p>
+        </div>
+        <div class="btn-group">
+            <button type="button" class="btn btn-success" onclick="checkAllHosts()">
+                <i class="bi bi-wifi me-1"></i>Проверить все
+            </button>
+            <button type="button" class="btn btn-outline-primary" onclick="exportHosts()">
+                <i class="bi bi-download me-1"></i>Экспорт
+            </button>
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" 
+                        data-bs-toggle="dropdown">
+                    <i class="bi bi-filter me-1"></i>Фильтры
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" onclick="filterByStatus('all')">Все хосты</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="#" onclick="filterByStatus('up')">
+                        <i class="bi bi-circle-fill text-success me-2"></i>Доступные
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="filterByStatus('down')">
+                        <i class="bi bi-circle-fill text-danger me-2"></i>Недоступные
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="filterByStatus('ssh_error')">
+                        <i class="bi bi-circle-fill text-warning me-2"></i>Ошибка SSH
+                    </a></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Карточки статистики хостов -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Доступные хосты
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="up-hosts-count">0</div>
+                            <div class="mt-2">
+                                <span class="text-success small">
+                                    <i class="bi bi-arrow-up"></i> <span id="up-hosts-percent">0%</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                Недоступные
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="down-hosts-count">0</div>
+                            <div class="mt-2">
+                                <span class="text-danger small">
+                                    <i class="bi bi-arrow-down"></i> <span id="down-hosts-percent">0%</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-x-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Ошибки SSH
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="ssh-error-count">0</div>
+                            <div class="mt-2">
+                                <span class="text-warning small">
+                                    <i class="bi bi-exclamation-triangle"></i> <span id="ssh-error-percent">0%</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-exclamation-triangle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Всего хостов
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-hosts-count">0</div>
+                            <div class="mt-2">
+                                <span class="text-info small">
+                                    <i class="bi bi-server"></i> <span id="inventories-count">0 инвентарей</span>
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-hdd-stack fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Таблица хостов -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="bi bi-table me-2"></i>Все хосты
+            </h6>
+            <div class="input-group w-auto">
+                <input type="text" class="form-control form-control-sm" 
+                       placeholder="Поиск по хостам..." id="hostSearch"
+                       onkeyup="searchHosts()">
+                <button class="btn btn-outline-secondary btn-sm" type="button">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="hostsTable">
+                    <thead class="thead-light">
+                        <tr>
+                            <th width="5%">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="selectAllHosts">
+                                </div>
+                            </th>
+                            <th width="20%">Хост</th>
+                            <th width="15%">Инвентарь / Группа</th>
+                            <th width="15%">IP Адрес</th>
+                            <th width="10%">Статус</th>
+                            <th width="10%">Роль</th>
+                            <th width="15%">Последняя проверка</th>
+                            <th width="10%">Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="hostsTableBody">
+                        {% if hosts %}
+                            {% for host in hosts %}
+                            <tr class="host-row" data-status="{{ host.status|default('unknown') }}" 
+                                data-inventory="{{ host.inventory|default('unknown') }}">
+                                <td>
+                                    <div class="form-check">
+                                        <input class="form-check-input host-checkbox" type="checkbox" 
+                                               value="{{ host.name }}">
+                                    </div>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <div class="host-status-indicator me-2 status-{{ host.status|default('unknown') }}"
+                                             title="{{ host.status|default('Неизвестно') }}"></div>
+                                        <div>
+                                            <strong>{{ host.name }}</strong>
+                                            {% if host.vars %}
+                                                <br>
+                                                <small class="text-muted">
+                                                    {% if host.vars.ansible_user %}
+                                                        <i class="bi bi-person me-1"></i>{{ host.vars.ansible_user }}
+                                                    {% endif %}
+                                                </small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <div>
+                                        <span class="badge bg-info mb-1">{{ host.inventory|default('N/A') }}</span>
+                                        <br>
+                                        <small class="text-muted">{{ host.group|default('N/A') }}</small>
+                                    </div>
+                                </td>
+                                <td>
+                                    <code>{{ host.address|default('N/A') }}</code>
+                                    {% if host.vars and host.vars.ansible_port %}
+                                        <br>
+                                        <small class="text-muted">Порт: {{ host.vars.ansible_port }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% set status = host.status|default('unknown') %}
+                                    {% if status == 'up' %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle me-1"></i>Доступен
+                                        </span>
+                                    {% elif status == 'down' %}
+                                        <span class="badge bg-danger">
+                                            <i class="bi bi-x-circle me-1"></i>Недоступен
+                                        </span>
+                                    {% elif status == 'ssh_error' %}
+                                        <span class="badge bg-warning">
+                                            <i class="bi bi-exclamation-triangle me-1"></i>SSH Error
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">
+                                            <i class="bi bi-question-circle me-1"></i>Неизвестно
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if host.vars and host.vars.node_role %}
+                                        <span class="badge bg-primary">{{ host.vars.node_role }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">N/A</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <small class="text-muted">{{ host.last_check|default('Никогда') }}</small>
+                                    {% if host.response_time %}
+                                        <br>
+                                        <small class="text-muted">{{ host.response_time }} ms</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('hosts.check_host', hostname=host.name) }}" 
+                                           class="btn btn-outline-primary" title="Проверить">
+                                            <i class="bi bi-search"></i>
+                                        </a>
+                                        <button class="btn btn-outline-success" title="Подключиться"
+                                                onclick="connectToHost('{{ host.name }}')">
+                                            <i class="bi bi-terminal"></i>
+                                        </button>
+                                        <button class="btn btn-outline-info" title="Информация"
+                                                onclick="showHostInfo('{{ host.name }}')">
+                                            <i class="bi bi-info-circle"></i>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center py-5">
+                                    <i class="bi bi-pc-display display-1 text-muted mb-3"></i>
+                                    <h4 class="text-muted">Хосты не найдены</h4>
+                                    <p class="text-muted">Создайте инвентари и добавьте хосты</p>
+                                    <a href="{{ url_for('inventory.inventory_list') }}" class="btn btn-primary">
+                                        <i class="bi bi-list-check me-1"></i>Перейти к инвентарям
+                                    </a>
+                                </td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Пагинация -->
+            {% if hosts and hosts|length > 10 %}
+            <nav aria-label="Навигация по хостам" class="mt-3">
+                <ul class="pagination justify-content-center">
+                    <li class="page-item disabled">
+                        <a class="page-link" href="#" tabindex="-1">Предыдущая</a>
+                    </li>
+                    <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                    <li class="page-item"><a class="page-link" href="#">2</a></li>
+                    <li class="page-item"><a class="page-link" href="#">3</a></li>
+                    <li class="page-item">
+                        <a class="page-link" href="#">Следующая</a>
+                    </li>
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Модальное окно информации о хосте -->
+    <div class="modal fade" id="hostInfoModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="hostInfoModalLabel">
+                        <i class="bi bi-info-circle me-2"></i>Информация о хосте
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="hostInfoContent">
+                    <!-- Контент будет загружаться динамически -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    <button type="button" class="btn btn-primary" onclick="runQuickCheck()">
+                        <i class="bi bi-play-fill me-1"></i>Быстрая проверка
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript для управления хостами -->
+<script>
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    updateHostStats();
+    
+    // Автообновление статистики каждые 30 секунд
+    setInterval(() => {
+        updateHostStats();
+    }, 30000);
+    
+    // Выделение всех хостов
+    document.getElementById('selectAllHosts').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.host-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+    });
+    
+    // Инициализация индикаторов статуса
+    initStatusIndicators();
+});
+
+// Обновление статистики хостов
+function updateHostStats() {
+    fetch('/hosts/api/stats')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('total-hosts-count').textContent = data.total_hosts || 0;
+                document.getElementById('up-hosts-count').textContent = data.up_hosts || 0;
+                document.getElementById('down-hosts-count').textContent = data.down_hosts || 0;
+                document.getElementById('ssh-error-count').textContent = data.ssh_error_hosts || 0;
+                document.getElementById('inventories-count').textContent = `${data.inventories || 0} инвентарей`;
+                
+                // Проценты
+                if (data.total_hosts > 0) {
+                    document.getElementById('up-hosts-percent').textContent = 
+                        Math.round((data.up_hosts / data.total_hosts) * 100) + '%';
+                    document.getElementById('down-hosts-percent').textContent = 
+                        Math.round((data.down_hosts / data.total_hosts) * 100) + '%';
+                    document.getElementById('ssh-error-percent').textContent = 
+                        Math.round((data.ssh_error_hosts / data.total_hosts) * 100) + '%';
+                }
+            }
+        })
+        .catch(error => console.error('Error updating host stats:', error));
+}
+
+// Поиск хостов
+function searchHosts() {
+    const input = document.getElementById('hostSearch').value.toLowerCase();
+    const rows = document.querySelectorAll('#hostsTableBody .host-row');
+    
+    rows.forEach(row => {
+        const hostName = row.querySelector('td:nth-child(2) strong').textContent.toLowerCase();
+        const inventory = row.getAttribute('data-inventory').toLowerCase();
+        const ip = row.querySelector('td:nth-child(4) code').textContent.toLowerCase();
+        
+        if (hostName.includes(input) || inventory.includes(input) || ip.includes(input)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// Фильтрация по статусу
+function filterByStatus(status) {
+    const rows = document.querySelectorAll('#hostsTableBody .host-row');
+    
+    rows.forEach(row => {
+        if (status === 'all' || row.getAttribute('data-status') === status) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+    
+    // Обновляем текст активного фильтра
+    const filterText = {
+        'all': 'Все хосты',
+        'up': 'Доступные',
+        'down': 'Недоступные',
+        'ssh_error': 'Ошибка SSH'
+    };
+    
+    document.querySelector('.dropdown-toggle').innerHTML = 
+        `<i class="bi bi-filter me-1"></i>${filterText[status]}`;
+}
+
+// Проверка всех хостов
+function checkAllHosts() {
+    const selectedHosts = Array.from(document.querySelectorAll('.host-checkbox:checked'))
+                              .map(cb => cb.value);
+    
+    const hostsToCheck = selectedHosts.length > 0 ? selectedHosts : 
+        Array.from(document.querySelectorAll('.host-checkbox')).map(cb => cb.value);
+    
+    if (hostsToCheck.length === 0) {
+        showAlert('Нет хостов для проверки', 'warning');
+        return;
+    }
+    
+    showAlert(`Начинаю проверку ${hostsToCheck.length} хостов...`, 'info');
+    
+    fetch('/hosts/api/ping-all', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({hosts: hostsToCheck})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.results) {
+            data.results.forEach(result => {
+                updateHostStatus(result.host, result.status, result.response_time);
+            });
+            showAlert(`Проверка завершена: ${hostsToCheck.length} хостов`, 'success');
+            updateHostStats();
+        }
+    })
+    .catch(error => {
+        showAlert('Ошибка при проверке хостов: ' + error.message, 'error');
+    });
+}
+
+// Обновление статуса хоста в таблице
+function updateHostStatus(hostName, status, responseTime) {
+    const rows = document.querySelectorAll('.host-row');
+    
+    rows.forEach(row => {
+        const nameCell = row.querySelector('td:nth-child(2) strong');
+        if (nameCell && nameCell.textContent === hostName) {
+            // Обновляем индикатор статуса
+            row.setAttribute('data-status', status);
+            
+            // Обновляем иконку статуса
+            const statusCell = row.querySelector('td:nth-child(5)');
+            let badgeHtml, badgeClass, icon;
+            
+            switch(status) {
+                case 'up':
+                    badgeClass = 'success';
+                    icon = 'check-circle';
+                    badgeText = 'Доступен';
+                    break;
+                case 'down':
+                    badgeClass = 'danger';
+                    icon = 'x-circle';
+                    badgeText = 'Недоступен';
+                    break;
+                case 'ssh_error':
+                    badgeClass = 'warning';
+                    icon = 'exclamation-triangle';
+                    badgeText = 'SSH Error';
+                    break;
+                default:
+                    badgeClass = 'secondary';
+                    icon = 'question-circle';
+                    badgeText = 'Неизвестно';
+            }
+            
+            statusCell.innerHTML = `
+                <span class="badge bg-${badgeClass}">
+                    <i class="bi bi-${icon} me-1"></i>${badgeText}
+                </span>
+            `;
+            
+            // Обновляем время последней проверки
+            const timeCell = row.querySelector('td:nth-child(7)');
+            const now = new Date();
+            timeCell.innerHTML = `
+                <small class="text-muted">${now.toLocaleTimeString('ru-RU')}</small>
+                <br>
+                <small class="text-muted">${responseTime || 'N/A'} ms</small>
+            `;
+            
+            // Обновляем индикатор в ячейке с именем
+            const indicator = row.querySelector('.host-status-indicator');
+            if (indicator) {
+                indicator.className = `host-status-indicator me-2 status-${status}`;
+                indicator.title = badgeText;
+            }
+        }
+    });
+}
+
+// Показать информацию о хосте
+function showHostInfo(hostName) {
+    fetch(`/hosts/api/info/${encodeURIComponent(hostName)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('hostInfoModalLabel').innerHTML = 
+                    `<i class="bi bi-info-circle me-2"></i>${hostName}`;
+                
+                document.getElementById('hostInfoContent').innerHTML = `
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Основная информация</h6>
+                            <ul class="list-group list-group-flush">
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Инвентарь:</span>
+                                    <strong>${data.host.inventory || 'N/A'}</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Группа:</span>
+                                    <strong>${data.host.group || 'N/A'}</strong>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>IP Адрес:</span>
+                                    <code>${data.host.address || 'N/A'}</code>
+                                </li>
+                                <li class="list-group-item d-flex justify-content-between">
+                                    <span>Статус:</span>
+                                    <span class="badge bg-${data.host.status === 'up' ? 'success' : data.host.status === 'down' ? 'danger' : 'warning'}">
+                                        ${data.host.status || 'unknown'}
+                                    </span>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Переменные Ansible</h6>
+                            <div class="card">
+                                <div class="card-body" style="max-height: 200px; overflow-y: auto;">
+                                    <pre class="mb-0"><code>${JSON.stringify(data.host.vars || {}, null, 2)}</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6>История проверок</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Время</th>
+                                            <th>Статус</th>
+                                            <th>Время ответа</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="checkHistory">
+                                        <!-- История будет загружена динамически -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                $('#hostInfoModal').modal('show');
+            } else {
+                showAlert('Ошибка загрузки информации: ' + data.message, 'error');
+            }
+        })
+        .catch(error => {
+            showAlert('Ошибка сети: ' + error.message, 'error');
+        });
+}
+
+// Подключиться к хосту (имитация)
+function connectToHost(hostName) {
+    showAlert(`Подключение к ${hostName}... Открытие терминала`, 'info');
+    // В реальном приложении здесь будет открытие WebSocket терминала
+}
+
+// Экспорт списка хостов
+function exportHosts() {
+    const format = prompt('Выберите формат экспорта (csv, json, yaml):', 'json');
+    
+    if (format && ['csv', 'json', 'yaml'].includes(format.toLowerCase())) {
+        window.open(`/hosts/api/export?format=${format}`, '_blank');
+    }
+}
+
+// Инициализация индикаторов статуса
+function initStatusIndicators() {
+    const indicators = document.querySelectorAll('.host-status-indicator');
+    indicators.forEach(indicator => {
+        const status = indicator.className.includes('status-up') ? 'up' :
+                      indicator.className.includes('status-down') ? 'down' :
+                      indicator.className.includes('status-ssh_error') ? 'ssh_error' : 'unknown';
+        indicator.innerHTML = `<i class="bi bi-circle-fill"></i>`;
+    });
+}
+
+// Утилита для показа уведомлений
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    alertDiv.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="bi ${type === 'success' ? 'bi-check-circle' : type === 'error' ? 'bi-x-circle' : 'bi-info-circle'} me-2"></i>
+            <div>${message}</div>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+    document.body.appendChild(alertDiv);
+    setTimeout(() => {
+        if (alertDiv.parentElement) alertDiv.remove();
+    }, 5000);
+}
+</script>
+
+<style>
+/* Стили для индикаторов статуса */
+.host-status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.host-status-indicator.status-up {
+    background-color: #28a745;
+    box-shadow: 0 0 5px rgba(40, 167, 69, 0.5);
+}
+
+.host-status-indicator.status-down {
+    background-color: #dc3545;
+    box-shadow: 0 0 5px rgba(220, 53, 69, 0.5);
+}
+
+.host-status-indicator.status-ssh_error {
+    background-color: #ffc107;
+    box-shadow: 0 0 5px rgba(255, 193, 7, 0.5);
+}
+
+.host-status-indicator.status-unknown {
+    background-color: #6c757d;
+    box-shadow: 0 0 5px rgba(108, 117, 125, 0.5);
+}
+
+/* Анимация пульсации для индикаторов */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.host-status-indicator.pulse {
+    animation: pulse 2s infinite;
+}
+
+/* Стили для таблицы */
+#hostsTable tbody tr:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+    cursor: pointer;
+}
+
+#hostsTable tbody tr.selected {
+    background-color: rgba(0, 123, 255, 0.1);
+}
+</style>
+{% endblock %}

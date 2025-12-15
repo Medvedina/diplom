@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Ansible Control Panel{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block styles %}{% endblock %}
+</head>
+<body>
+    <!-- Верхняя навигационная панель -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}">
+                <i class="bi bi-server me-2"></i> 
+                <span class="fw-bold">Ansible Control Panel</span>
+            </a>
+            
+            <!-- Кнопка для мобильного меню -->
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            
+            <!-- Правая часть навигации -->
+            <div class="collapse navbar-collapse" id="mainNavbar">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="bi bi-person-circle me-1"></i> admin
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#"><i class="bi bi-person me-2"></i>Профиль</a></li>
+                            <li><a class="dropdown-item" href="#"><i class="bi bi-gear me-2"></i>Настройки</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="#"><i class="bi bi-box-arrow-right me-2"></i>Выйти</a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Основной контейнер с боковой панелью и контентом -->
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Боковая панель с вкладками -->
+            <div class="col-lg-2 col-md-3 sidebar bg-light border-end">
+                <div class="sticky-top" style="top: 20px;">
+                    <!-- Навигация по вкладкам -->
+                    <nav class="nav flex-column mt-3">
+                        {% for tab_id, tab in tabs_config.items() %}
+                            <a class="nav-link tab-link {% if active_tab == tab_id %}active bg-primary text-white{% else %}text-dark{% endif %}"
+                               href="{{ url_for(tab.url) }}"
+                               data-tab="{{ tab_id }}">
+                                <i class="bi bi-{{ tab.icon }} me-2"></i>
+                                {{ tab.name }}
+                                {% if tab_id == 'hosts' %}
+                                    <span class="badge bg-danger float-end">3</span>
+                                {% elif tab_id == 'tasks' %}
+                                    <span class="badge bg-warning float-end">5</span>
+                                {% endif %}
+                            </a>
+                        {% endfor %}
+                    </nav>
+                    
+                    <!-- Быстрый доступ к инвентарям -->
+                    <div class="mt-4 px-3">
+                        <h6 class="text-muted text-uppercase small">Быстрый доступ</h6>
+                        <div class="list-group list-group-flush">
+                            {% for inventory in list_inventories() %}
+                                <a href="{{ url_for('inventory.inventory_detail', inventory_name=inventory.name) }}" 
+                                   class="list-group-item list-group-item-action border-0 py-2">
+                                    <i class="bi bi-folder text-info me-2"></i>
+                                    {{ inventory.name }}
+                                    <small class="text-muted d-block">{{ inventory.modified }}</small>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <!-- Статус системы -->
+                    <div class="mt-4 px-3">
+                        <h6 class="text-muted text-uppercase small">Статус системы</h6>
+                        <div class="card bg-light border-0">
+                            <div class="card-body p-2">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small>Хостов онлайн:</small>
+                                    <span class="badge bg-success">24/30</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <small>Запущено задач:</small>
+                                    <span class="badge bg-info">3</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small>Ансибл версия:</small>
+                                    <span class="badge bg-secondary">2.14</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Основной контент -->
+            <div class="col-lg-10 col-md-9 content-area">
+                <!-- Хлебные крошки и действия -->
+                <div class="d-flex justify-content-between align-items-center mt-3 mb-4">
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item">
+                                <i class="bi bi-{{ tabs_config[active_tab].icon }} me-1"></i>
+                                {{ tabs_config[active_tab].name }}
+                            </li>
+                            {% block breadcrumbs %}{% endblock %}
+                        </ol>
+                    </nav>
+                    
+                    <div class="btn-group" role="group">
+                        {% if active_tab == 'inventory' %}
+                            <button class="btn btn-outline-primary" onclick="refreshInventory()">
+                                <i class="bi bi-arrow-clockwise"></i> Обновить
+                            </button>
+                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newInventoryModal">
+                                <i class="bi bi-plus-circle"></i> Новый инвентарь
+                            </button>
+                        {% elif active_tab == 'dashboard' %}
+                            <button class="btn btn-outline-secondary" onclick="refreshDashboard()">
+                                <i class="bi bi-arrow-clockwise"></i> Обновить дашборд
+                            </button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Контент страницы -->
+                <div class="main-content">
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="alert alert-{{ category or 'info' }} alert-dismissible fade show">
+                                    {{ message }}
+                                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    {% block content %}{% endblock %}
+                </div>
+                
+                <!-- Футер -->
+                <footer class="mt-5 pt-3 border-top text-muted">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small>Ansible Control Panel v1.0.0</small>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <small>Последнее обновление: <span id="last-update">{{ now() }}</span></small>
+                        </div>
+                    </div>
+                </footer>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для нового инвентаря -->
+    <div class="modal fade" id="newInventoryModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Новый инвентарь</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="newInventoryForm">
+                        <div class="mb-3">
+                            <label for="inventoryName" class="form-label">Название инвентаря</label>
+                            <input type="text" class="form-control" id="inventoryName" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="inventoryType" class="form-label">Тип инвентаря</label>
+                            <select class="form-select" id="inventoryType">
+                                <option value="static">Статический (YAML)</option>
+                                <option value="dynamic">Динамический (скрипт)</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" onclick="createInventory()">Создать</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Скрипты -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    
+    <script>
+// Обновление времени
+function updateTime() {
+    const now = new Date();
+    const timeElement = document.getElementById('current-time');
+    if (timeElement) {
+        timeElement.textContent = now.toLocaleTimeString('ru-RU');
+    }
+}
+setInterval(updateTime, 1000);
+updateTime();
+
+// Подсветка активной вкладки - ИСПРАВЛЕННЫЙ КОД
+document.addEventListener('DOMContentLoaded', function() {
+    const activeTab = '{{ active_tab }}';
+    
+    // Убираем классы active у всех вкладок
+    document.querySelectorAll('.tab-link').forEach(link => {
+        link.classList.remove('active', 'bg-primary', 'text-white');
+        link.classList.add('text-dark');
+    });
+    
+    // Добавляем классы активной вкладке
+    const activeLink = document.querySelector(`.tab-link[data-tab="${activeTab}"]`);
+    if (activeLink) {
+        activeLink.classList.remove('text-dark');
+        activeLink.classList.add('active', 'bg-primary', 'text-white');
+    }
+    
+    // Также подсвечиваем вкладку в хлебных крошках
+    const breadcrumbActive = document.querySelector('.breadcrumb .active');
+    if (breadcrumbActive) {
+        const icon = breadcrumbActive.querySelector('i');
+        if (icon) {
+            icon.classList.add('text-primary');
+        }
+    }
+});
+
+// Функции для кнопок действий
+function refreshInventory() {
+    window.location.reload();
+}
+
+function refreshDashboard() {
+    fetch('/dashboard/api/system-stats')
+        .then(response => response.json())
+        .then(data => {
+            console.log('Dashboard refreshed:', data);
+            showToast('Дашборд обновлен', 'success');
+        })
+        .catch(error => {
+            console.error('Error refreshing dashboard:', error);
+            showToast('Ошибка обновления', 'error');
+        });
+}
+
+function createInventory() {
+    const name = document.getElementById('inventoryName').value;
+    const type = document.getElementById('inventoryType').value;
+    
+    if (!name) {
+        showToast('Введите название инвентаря', 'warning');
+        return;
+    }
+    
+    fetch('/inventory/api/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name, type: type})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('Инвентарь создан', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showToast('Ошибка: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showToast('Ошибка сети: ' + error.message, 'error');
+    });
+}
+
+function showToast(message, type) {
+    // Простая реализация уведомления
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.remove();
+        }
+    }, 3000);
+}
+</script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}{{ inventory_name }} - Инвентарь{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-list-check"></i> {{ inventory_name }}</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('inventory.inventory_list') }}">Инвентари</a></li>
+                    <li class="breadcrumb-item active">{{ inventory_name }}</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" onclick="refreshHostStatus()">
+                <i class="bi bi-arrow-clockwise"></i> Обновить статус
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-9">
+            {% for group_name, group_data in inventory.all.children.items() %}
+            <div class="card mb-3">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-collection"></i> {{ group_name }}
+                        <span class="badge bg-light text-dark float-end">
+                            {{ group_data.hosts|length }} хостов
+                        </span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Хост</th>
+                                    <th>IP Адрес</th>
+                                    <th>Роль</th>
+                                    <th>Статус</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for host_name, host_vars in group_data.hosts.items() %}
+                                {% set status = host_statuses.get(host_name, 'unknown') %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ host_name }}</strong>
+                                    </td>
+                                    <td>
+                                        <code>{{ host_vars.get('ansible_host', 'N/A') }}</code>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-info">
+                                            {{ host_vars.get('node_role', 'unknown') }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="host-status status-{{ status }}" 
+                                              data-host="{{ host_name }}"
+                                              id="status-{{ host_name|replace('.', '-') }}">
+                                            {% if status == 'up' %}
+                                            <i class="bi bi-check-circle-fill text-success"></i> Доступен
+                                            {% elif status == 'down' %}
+                                            <i class="bi bi-x-circle-fill text-danger"></i> Недоступен
+                                            {% elif status == 'ssh_error' %}
+                                            <i class="bi bi-exclamation-triangle-fill text-warning"></i> Ошибка SSH
+                                            {% else %}
+                                            <i class="bi bi-question-circle-fill text-secondary"></i> Неизвестно
+                                            {% endif %}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('hosts.check_host', hostname=host_name) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-search"></i> Проверить
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> Информация</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Глобальные переменные:</h6>
+                    <ul class="list-unstyled">
+                        {% for key, value in inventory.all.vars.items() %}
+                        <li><strong>{{ key }}:</strong> <code>{{ value }}</code></li>
+                        {% endfor %}
+                    </ul>
+                    
+                    <hr>
+                    
+                    <h6>Статистика:</h6>
+                    <div class="d-flex justify-content-between">
+                        <span>Всего групп:</span>
+                        <strong>{{ inventory.all.children|length }}</strong>
+                    </div>
+                    {% set total_hosts = [] %}
+                    {% for group in inventory.all.children.values() %}
+                        {% if group.hosts %}
+                            {% for _ in group.hosts %}
+                                {% set _ = total_hosts.append(1) %}
+                            {% endfor %}
+                        {% endif %}
+                    {% endfor %}
+                    <div class="d-flex justify-content-between">
+                        <span>Всего хостов:</span>
+                        <strong>{{ total_hosts|length }}</strong>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="bi bi-lightning-charge"></i> Быстрые действия</h5>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-success w-100 mb-2" onclick="runPingTest()">
+                        <i class="bi bi-wifi"></i> Ping все хосты
+                    </button>
+                    <button class="btn btn-primary w-100 mb-2">
+                        <i class="bi bi-play-circle"></i> Запустить плейбук
+                    </button>
+                    <button class="btn btn-outline-secondary w-100">
+                        <i class="bi bi-download"></i> Экспорт инвентаря
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/host-monitor.js') }}"></script>
+<script>
+function refreshHostStatus() {
+    // Создаем массив хостов
+    const hosts = [];
+    
+    {% if inventory and inventory.all and inventory.all.children %}
+        {% for group_name, group_data in inventory.all.children.items() %}
+            {% if group_data.hosts %}
+                {% for host_name in group_data.hosts.keys() %}
+                    hosts.push("{{ host_name }}");
+                {% endfor %}
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+    
+    if (hosts.length === 0) {
+        showAlert('Нет хостов для проверки', 'warning');
+        return;
+    }
+    
+    fetch('/inventory/api/check-hosts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({hosts: hosts})
+    })
+    .then(response => response.json())
+    .then(data => {
+        data.results.forEach(result => {
+            updateHostStatusUI(result.host, result.status);
+        });
+        showAlert('Статус хостов обновлен', 'success');
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('Ошибка при обновлении статуса', 'error');
+    });
+}
+
+function updateHostStatusUI(host, status) {
+    const elementId = 'status-' + host.replace(/\./g, '-');
+    const element = document.getElementById(elementId);
+    if (!element) return;
+    
+    let icon, text, color;
+    switch(status) {
+        case 'up':
+            icon = 'bi-check-circle-fill';
+            text = 'Доступен';
+            color = 'success';
+            break;
+        case 'down':
+            icon = 'bi-x-circle-fill';
+            text = 'Недоступен';
+            color = 'danger';
+            break;
+        case 'ssh_error':
+            icon = 'bi-exclamation-triangle-fill';
+            text = 'Ошибка SSH';
+            color = 'warning';
+            break;
+        default:
+            icon = 'bi-question-circle-fill';
+            text = 'Неизвестно';
+            color = 'secondary';
+    }
+    
+    element.innerHTML = `<i class="bi ${icon} text-${color}"></i> ${text}`;
+    element.className = `host-status status-${status}`;
+}
+
+function runPingTest() {
+    fetch('/hosts/api/ping-all')
+    .then(response => response.json())
+    .then(data => {
+        if (data.results) {
+            data.results.forEach(result => {
+                updateHostStatusUI(result.host, result.status || 'unknown');
+            });
+            showAlert('Ping тест завершен', 'info');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('Ошибка при выполнении ping теста', 'error');
+    });
+}
+
+function showAlert(message, type) {
+    // Простая реализация уведомления
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050;';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" onclick="this.parentElement.remove()"></button>
+    `;
+    document.body.appendChild(alertDiv);
+    setTimeout(() => {
+        if (alertDiv.parentElement) {
+            alertDiv.remove();
+        }
+    }, 3000);
+}
+</script>
+{% endblock %}

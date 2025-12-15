@@ -1,0 +1,546 @@
+{% extends "base.html" %}
+
+{% block title %}Редактирование {{ inventory_name }} - Ansible Control Panel{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{{ url_for('inventory.inventory_list') }}">Инвентари</a>
+    </li>
+    <li class="breadcrumb-item">
+        <a href="{{ url_for('inventory.inventory_detail', inventory_name=inventory_name) }}">{{ inventory_name }}</a>
+    </li>
+    <li class="breadcrumb-item active">Редактирование</li>
+{% endblock %}
+
+{% block styles %}
+<style>
+    /* Стили для YAML редактора */
+    .yaml-editor {
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 14px;
+        line-height: 1.5;
+        tab-size: 2;
+    }
+    
+    .code-editor-container {
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        overflow: hidden;
+    }
+    
+    .editor-header {
+        background-color: #f8f9fa;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid #dee2e6;
+        font-weight: 600;
+    }
+    
+    .editor-footer {
+        background-color: #f8f9fa;
+        padding: 0.5rem 1rem;
+        border-top: 1px solid #dee2e6;
+        font-size: 0.875rem;
+    }
+    
+    /* Подсветка синтаксиса */
+    .yaml-key {
+        color: #22863a;
+        font-weight: 600;
+    }
+    
+    .yaml-value {
+        color: #005cc5;
+    }
+    
+    .yaml-comment {
+        color: #6a737d;
+        font-style: italic;
+    }
+    
+    .yaml-number {
+        color: #e36209;
+    }
+    
+    /* Кнопки действий */
+    .btn-fixed-width {
+        min-width: 140px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Заголовок и навигация -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="bi bi-pencil me-2"></i>Редактирование инвентаря
+            </h1>
+            <p class="text-muted mb-0">
+                {{ inventory_name }} · Последнее изменение: {{ modified }}
+            </p>
+        </div>
+        <div class="btn-group">
+            <a href="{{ url_for('inventory.inventory_detail', inventory_name=inventory_name) }}" 
+               class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Назад к просмотру
+            </a>
+            <button class="btn btn-outline-info" onclick="validateYaml()">
+                <i class="bi bi-check-circle me-1"></i>Проверить синтаксис
+            </button>
+        </div>
+    </div>
+
+    <!-- YAML редактор -->
+    <div class="card shadow mb-4">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="bi bi-file-code me-2"></i>Редактор YAML
+            </h6>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" onclick="formatYaml()">
+                    <i class="bi bi-braces me-1"></i>Форматировать
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" onclick="showTemplate()">
+                    <i class="bi bi-card-text me-1"></i>Шаблоны
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="code-editor-container">
+                <div class="editor-header d-flex justify-content-between align-items-center">
+                    <span>{{ inventory_name }}.yaml</span>
+                    <span class="badge bg-info">YAML</span>
+                </div>
+                
+                <textarea id="yamlEditor" class="form-control yaml-editor border-0 rounded-0" 
+                          rows="25" spellcheck="false">{{ yaml_content }}</textarea>
+                
+                <div class="editor-footer d-flex justify-content-between align-items-center">
+                    <div>
+                        <span id="lineCount">1 строка</span>
+                        <span class="mx-2">·</span>
+                        <span id="charCount">{{ yaml_content|length }} символов</span>
+                    </div>
+                    <div>
+                        <span class="badge bg-light text-dark">
+                            <i class="bi bi-keyboard me-1"></i>Tab для отступов
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="alert alert-warning mt-3">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                <strong>Внимание!</strong> Неправильный формат YAML может сделать инвентарь нечитаемым. 
+                Всегда проверяйте синтаксис перед сохранением.
+            </div>
+        </div>
+    </div>
+
+    <!-- Панель действий -->
+    <div class="card shadow">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="mb-3">
+                        <label class="form-label">Комментарий к изменениям</label>
+                        <input type="text" class="form-control" id="changeComment" 
+                               placeholder="Опишите, что было изменено...">
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="createBackup" checked>
+                        <label class="form-check-label" for="createBackup">
+                            Создать резервную копию перед сохранением
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-lg btn-fixed-width" onclick="saveChanges()">
+                            <i class="bi bi-save me-2"></i>Сохранить
+                        </button>
+                        <button class="btn btn-outline-secondary btn-fixed-width" onclick="previewChanges()">
+                            <i class="bi bi-eye me-2"></i>Предпросмотр
+                        </button>
+                        <button class="btn btn-outline-danger btn-fixed-width" onclick="discardChanges()">
+                            <i class="bi bi-x-circle me-2"></i>Отменить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно предпросмотра -->
+    <div class="modal fade" id="previewModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Предпросмотр изменений</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Исходный YAML</h6>
+                            <pre class="bg-light p-3 border rounded" style="max-height: 400px; overflow-y: auto;">
+{{ yaml_content }}</pre>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Новый YAML</h6>
+                            <pre class="bg-light p-3 border rounded" id="newYamlPreview" 
+                                 style="max-height: 400px; overflow-y: auto;"></pre>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    <button type="button" class="btn btn-primary" onclick="saveChanges()">
+                        <i class="bi bi-save me-1"></i>Сохранить изменения
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно шаблонов -->
+    <div class="modal fade" id="templatesModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Шаблоны для сетевого оборудования</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="bi bi-router text-danger me-2"></i>Базовый шаблон
+                                    </h6>
+                                    <p class="card-text small">Структура для маршрутизаторов и коммутаторов</p>
+                                    <button class="btn btn-sm btn-outline-primary w-100" 
+                                            onclick="applyTemplate('basic')">
+                                        Применить
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="card h-100">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="bi bi-diagram-3 text-info me-2"></i>Сетевая инфраструктура
+                                    </h6>
+                                    <p class="card-text small">Core, Distribution, Access уровни</p>
+                                    <button class="btn btn-sm btn-outline-primary w-100" 
+                                            onclick="applyTemplate('network')">
+                                        Применить
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript для редактора -->
+<script>
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    updateLineCount();
+    
+    // Автосохранение каждые 30 секунд
+    setInterval(() => {
+        autoSaveDraft();
+    }, 30000);
+    
+    // Обновление счетчиков при вводе
+    document.getElementById('yamlEditor').addEventListener('input', function() {
+        updateLineCount();
+        updateCharCount();
+    });
+    
+    // Обработка Tab для отступов
+    document.getElementById('yamlEditor').addEventListener('keydown', function(e) {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            const start = this.selectionStart;
+            const end = this.selectionEnd;
+            
+            // Вставляем 2 пробела
+            this.value = this.value.substring(0, start) + '  ' + this.value.substring(end);
+            
+            // Устанавливаем курсор после отступа
+            this.selectionStart = this.selectionEnd = start + 2;
+        }
+    });
+});
+
+// Обновление счетчика строк
+function updateLineCount() {
+    const editor = document.getElementById('yamlEditor');
+    const lines = editor.value.split('\n').length;
+    document.getElementById('lineCount').textContent = `${lines} строк`;
+}
+
+// Обновление счетчика символов
+function updateCharCount() {
+    const editor = document.getElementById('yamlEditor');
+    document.getElementById('charCount').textContent = `${editor.value.length} символов`;
+}
+
+// Сохранение изменений
+function saveChanges() {
+    const yamlContent = document.getElementById('yamlEditor').value;
+    const comment = document.getElementById('changeComment').value;
+    const createBackup = document.getElementById('createBackup').checked;
+    
+    if (!yamlContent.trim()) {
+        showAlert('Инвентарь не может быть пустым', 'warning');
+        return;
+    }
+    
+    // Показываем индикатор сохранения
+    showAlert('Сохранение изменений...', 'info');
+    
+    fetch('/inventory/api/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name: '{{ inventory_name }}',
+            content: yamlContent,
+            comment: comment,
+            backup: createBackup
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Изменения успешно сохранены', 'success');
+            
+            // Перенаправляем на страницу инвентаря через 1.5 секунды
+            setTimeout(() => {
+                window.location.href = '/inventory/{{ inventory_name }}';
+            }, 1500);
+            
+        } else {
+            showAlert('Ошибка сохранения: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Ошибка сети: ' + error.message, 'error');
+    });
+}
+
+// Проверка YAML синтаксиса
+function validateYaml() {
+    const yamlContent = document.getElementById('yamlEditor').value;
+    
+    fetch('/inventory/api/validate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            content: yamlContent
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.valid) {
+            showAlert('✓ YAML синтаксис корректен', 'success');
+        } else {
+            showAlert('✗ Ошибка YAML: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Ошибка проверки: ' + error.message, 'error');
+    });
+}
+
+// Предпросмотр изменений
+function previewChanges() {
+    const newContent = document.getElementById('yamlEditor').value;
+    document.getElementById('newYamlPreview').textContent = newContent;
+    
+    const previewModal = new bootstrap.Modal(document.getElementById('previewModal'));
+    previewModal.show();
+}
+
+// Отмена изменений
+function discardChanges() {
+    if (confirm('Отменить все изменения и вернуться к просмотру?')) {
+        window.location.href = '/inventory/{{ inventory_name }}';
+    }
+}
+
+// Форматирование YAML
+function formatYaml() {
+    const editor = document.getElementById('yamlEditor');
+    const content = editor.value;
+    
+    try {
+        // Простая автоматическая расстановка отступов
+        const lines = content.split('\n');
+        let formatted = '';
+        let indentLevel = 0;
+        
+        for (let line of lines) {
+            const trimmed = line.trim();
+            
+            if (trimmed === '' || trimmed.startsWith('#')) {
+                formatted += line + '\n';
+                continue;
+            }
+            
+            // Уменьшаем отступ для закрывающих элементов
+            if (trimmed.startsWith('- ') || trimmed.endsWith(':')) {
+                // Увеличиваем отступ для новых элементов
+                indentLevel++;
+            }
+            
+            // Добавляем отступы
+            const indent = '  '.repeat(Math.max(0, indentLevel - 1));
+            formatted += indent + trimmed + '\n';
+            
+            // Сбрасываем отступ после строки без двоеточия
+            if (!trimmed.endsWith(':')) {
+                indentLevel = Math.max(0, indentLevel - 1);
+            }
+        }
+        
+        editor.value = formatted;
+        updateLineCount();
+        showAlert('YAML отформатирован', 'success');
+        
+    } catch (error) {
+        showAlert('Ошибка форматирования: ' + error.message, 'warning');
+    }
+}
+
+// Показать шаблоны
+function showTemplate() {
+    const templatesModal = new bootstrap.Modal(document.getElementById('templatesModal'));
+    templatesModal.show();
+}
+
+// Применить шаблон
+function applyTemplate(templateType) {
+    let template = '';
+    
+    if (templateType === 'basic') {
+        template = `all:
+  vars:
+    ansible_network_os: ios
+    ansible_connection: network_cli
+    ansible_user: admin
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+  
+  children:
+    routers:
+      hosts:
+        router-01.example.com:
+          ansible_host: 10.0.1.1
+          device_type: router
+        router-02.example.com:
+          ansible_host: 10.0.1.2
+          device_type: router
+    
+    switches:
+      hosts:
+        switch-01.example.com:
+          ansible_host: 10.0.2.1
+          device_type: switch
+        switch-02.example.com:
+          ansible_host: 10.0.2.2
+          device_type: switch`;
+    } else if (templateType === 'network') {
+        template = `all:
+  vars:
+    ansible_network_os: ios
+    ansible_connection: network_cli
+    ansible_user: admin
+  
+  children:
+    core_layer:
+      hosts:
+        core-sw-01.example.com:
+          ansible_host: 10.0.0.1
+          device_type: switch
+          role: core
+    
+    distribution_layer:
+      hosts:
+        dist-sw-01.example.com:
+          ansible_host: 10.0.1.1
+          device_type: switch
+          role: distribution
+    
+    access_layer:
+      hosts:
+        access-sw-01.example.com:
+          ansible_host: 10.0.2.1
+          device_type: switch
+          role: access
+          ports: 48`;
+    }
+    
+    document.getElementById('yamlEditor').value = template;
+    updateLineCount();
+    updateCharCount();
+    
+    const templatesModal = bootstrap.Modal.getInstance(document.getElementById('templatesModal'));
+    if (templatesModal) templatesModal.hide();
+    
+    showAlert('Шаблон применен', 'success');
+}
+
+// Автосохранение черновика
+function autoSaveDraft() {
+    const content = document.getElementById('yamlEditor').value;
+    localStorage.setItem(`draft_{{ inventory_name }}`, content);
+    console.log('Черновик автосохранен');
+}
+
+// Восстановление черновика
+function restoreDraft() {
+    const draft = localStorage.getItem(`draft_{{ inventory_name }}`);
+    if (draft) {
+        if (confirm('Найден черновик. Восстановить?')) {
+            document.getElementById('yamlEditor').value = draft;
+            updateLineCount();
+            updateCharCount();
+            showAlert('Черновик восстановлен', 'info');
+        }
+    }
+}
+
+// Утилита для показа уведомлений
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    alertDiv.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="bi ${type === 'success' ? 'bi-check-circle' : 
+                         type === 'error' ? 'bi-x-circle' : 
+                         type === 'warning' ? 'bi-exclamation-triangle' : 
+                         'bi-info-circle'} me-2"></i>
+            <div>${message}</div>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+    document.body.appendChild(alertDiv);
+    setTimeout(() => {
+        if (alertDiv.parentElement) alertDiv.remove();
+    }, 5000);
+}
+
+// Попытка восстановить черновик при загрузке
+restoreDraft();
+</script>
+{% endblock %}

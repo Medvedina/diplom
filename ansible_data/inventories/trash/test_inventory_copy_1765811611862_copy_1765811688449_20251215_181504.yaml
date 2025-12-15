@@ -1,0 +1,76 @@
+all:
+  vars:
+    ansible_network_os: ios
+    ansible_connection: network_cli
+    ansible_user: admin
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+    ansible_become: true
+    ansible_become_method: enable
+    cloned_from: test_inventory_copy_1765811611862
+    cloned_date: '2025-12-15'
+  children:
+    core_routers:
+      hosts:
+        core-rtr-01.example.com:
+          ansible_host: 10.0.1.1
+          device_type: router
+          vendor: Cisco
+          model: ASR 1001-X
+          location: Москва, ЦОД-1
+          role: Core Router
+        core-rtr-02.example.com:
+          ansible_host: 10.0.1.2
+          device_type: router
+          vendor: Juniper
+          model: MX204
+          location: Москва, ЦОД-2
+          role: Core Router
+    distribution_routers:
+      hosts:
+        dist-rtr-01.example.com:
+          ansible_host: 10.0.2.1
+          device_type: router
+          vendor: Cisco
+          model: ISR 4451
+          location: Санкт-Петербург
+          role: Distribution Router
+    core_switches:
+      hosts:
+        core-sw-01.example.com:
+          ansible_host: 10.0.3.1
+          device_type: switch
+          vendor: Cisco
+          model: Nexus 93180YC-EX
+          ports: 48
+          location: Москва, ЦОД-1
+          role: Core Switch
+    distribution_switches:
+      hosts:
+        dist-sw-01.example.com:
+          ansible_host: 10.0.4.1
+          device_type: switch
+          vendor: Juniper
+          model: EX4300
+          ports: 48
+          location: Москва, офис
+          role: Distribution Switch
+    access_switches:
+      hosts:
+        access-sw-01.example.com:
+          ansible_host: 10.0.5.1
+          device_type: switch
+          vendor: Cisco
+          model: Catalyst 9200
+          ports: 48
+          poe: true
+          location: 5 этаж, комната 501
+          role: Access Switch
+    firewalls:
+      hosts:
+        fw-01.example.com:
+          ansible_host: 10.0.6.1
+          device_type: firewall
+          vendor: Fortinet
+          model: FortiGate 100F
+          location: Периметр сети
+          role: Edge Firewall

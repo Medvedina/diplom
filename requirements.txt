@@ -1,0 +1,12 @@
+Flask>=2.3.0
+Flask-SQLAlchemy>=3.0.0
+Flask-Login>=0.6.0
+Flask-Migrate>=4.0.0
+Flask-WTF>=1.0.0
+python-dotenv>=1.0.0
+paramiko>=3.0.0
+ansible>=7.0.0
+celery>=5.0.0  # Для фоновых задач
+redis>=4.0.0   # Для Celery и кэширования
+psutil>=5.0.0  # Для мониторинга
+aiohttp
