@@ -267,6 +267,11 @@ def api_save_inventory():
         inventory_path = current_app.config.get('INVENTORY_PATH', 'ansible_data/inventories')
         file_path = os.path.join(inventory_path, f"{inventory_name}.yaml")
         
+        old_content = ''
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                old_content = f.read()
+
         # Создаем backup если нужно
         backup_path = None
         if create_backup and os.path.exists(file_path):
@@ -291,14 +296,22 @@ def api_save_inventory():
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        # Логируем изменение
-        current_app.logger.info(f"Inventory '{inventory_name}' saved. Comment: {comment}")
+        changes = InventoryHistory.compare_inventories(old_content, content, inventory_name)
+        
+        # Логируем редактирование
+        InventoryHistory.log_change(
+            inventory_name=inventory_name,
+            action='edit',
+            user='admin',
+            comment=comment if comment else "Изменения в инвентаре",
+            changes=changes
+        )
         
         return jsonify({
             'success': True,
             'message': 'Инвентарь сохранен',
-            'backup_created': backup_path is not None,
-            'backup_path': backup_path
+            'changes': changes,
+            'backup_created': backup_path is not None
         })
         
     except Exception as e:
@@ -312,16 +325,28 @@ def api_delete_inventory():
     try:
         data = request.json
         inventory_name = data.get('name')
-        
+        comment = data.get('comment', '')
+
         if not inventory_name:
             return jsonify({'success': False, 'message': 'Не указано название инвентаря'})
         
         inventory_path = current_app.config.get('INVENTORY_PATH', 'ansible_data/inventories')
         file_path = os.path.join(inventory_path, f"{inventory_name}.yaml")
         
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+
         if not os.path.exists(file_path):
             return jsonify({'success': False, 'message': 'Инвентарь не найден'})
-        
+       
+        InventoryHistory.log_change(
+                inventory_name=inventory_name,
+                action='delete',
+                user='admin',
+                comment=comment if comment else "Инвентарь удален",
+                changes={'content_length': len(content)}
+            )
         # Перемещаем в корзину (создаем папку trash)
         trash_path = os.path.join(inventory_path, 'trash')
         os.makedirs(trash_path, exist_ok=True)
@@ -377,7 +402,8 @@ def api_clone_inventory():
         data = request.json
         source_name = data.get('source')
         target_name = data.get('target')
-        
+        comment = data.get('comment', '')
+
         if not source_name or not target_name:
             return jsonify({'success': False, 'message': 'Не указаны имена инвентарей'})
         
@@ -404,7 +430,22 @@ def api_clone_inventory():
             
             with open(target_path, 'w', encoding='utf-8') as f:
                 yaml.dump(content, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+       
+        InventoryHistory.log_change(
+            inventory_name=source_name,
+            action='clone',
+            user='admin',
+            comment=f"Клонирован как {target_name}. {comment}" if comment else f"Клонирован как {target_name}",
+            changes={'cloned_to': target_name}
+        )
         
+        InventoryHistory.log_change(
+            inventory_name=target_name,
+            action='create',
+            user='admin',
+            comment=f"Создан клон из {source_name}. {comment}" if comment else f"Создан клон из {source_name}",
+            changes={'cloned_from': source_name}
+        )
         return jsonify({
             'success': True,
             'message': 'Инвентарь скопирован',
@@ -415,7 +456,56 @@ def api_clone_inventory():
     except Exception as e:
         current_app.logger.error(f"Error cloning inventory: {e}")
         return jsonify({'success': False, 'message': f'Ошибка клонирования: {str(e)}'})
+@bp.route('/api/history/<inventory_name>')
+def api_inventory_history(inventory_name):
+    """API для получения истории изменений инвентаря"""
+    try:
+        history = InventoryHistory.get_inventory_history(inventory_name)
+        return jsonify({
+            'success': True,
+            'inventory': inventory_name,
+            'history': history,
+            'total': len(history)
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error getting inventory history: {e}")
+        return jsonify({'success': False, 'message': str(e)})
 
+# Endpoint для получения последних событий
+@bp.route('/api/recent-events')
+def api_recent_events():
+    """API для получения последних событий"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        events = InventoryHistory.get_recent_events(limit)
+        
+        # Форматируем для отображения
+        formatted_events = []
+        for event in events:
+            formatted_events.append({
+                'id': event.get('id'),
+                'type': 'inventory',
+                'action': event.get('action'),
+                'title': InventoryHistory._get_action_title(event.get('action'), event.get('inventory')),
+                'description': event.get('comment') or InventoryHistory._get_action_description(event.get('action')),
+                'inventory': event.get('inventory'),
+                'user': event.get('user'),
+                'time': event.get('display_time'),
+                'timestamp': event.get('timestamp'),
+                'icon': event.get('icon'),
+                'color': event.get('color'),
+                'badge': InventoryHistory._get_action_badge(event.get('action'))
+            })
+        
+        return jsonify({
+            'success': True,
+            'events': formatted_events,
+            'total': len(formatted_events)
+        })
+    except Exception as e:
+        current_app.logger.error(f"Error getting recent events: {e}")
+        return jsonify({'success': False, 'message': str(e)})
+    
 # API для экспорта инвентаря
 @bp.route('/api/export/<inventory_name>')
 def api_export_inventory(inventory_name):
@@ -538,3 +628,16 @@ def api_export_multiple():
     except Exception as e:
         current_app.logger.error(f"Error exporting multiple inventories: {e}")
         return jsonify({'success': False, 'message': f'Ошибка экспорта: {str(e)}'}), 500
+    
+@bp.route('/<inventory_name>/history')
+@set_active_tab('inventory')
+def inventory_history(inventory_name):
+    """Страница истории изменений инвентаря"""
+    inventory = load_inventory_local(inventory_name)
+    
+    if not inventory:
+        return render_template('errors/404.html', 
+                             message=f"Инвентарь '{inventory_name}' не найден"), 404
+    
+    return render_template('inventory/history.html',
+                         inventory_name=inventory_name)

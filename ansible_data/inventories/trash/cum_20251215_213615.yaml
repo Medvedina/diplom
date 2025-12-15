@@ -1,0 +1,28 @@
+all:
+  vars:
+    ansible_network_os: ios
+    ansible_connection: network_cli
+    ansible_user: admin
+  
+  children:
+    core_layer:
+      hosts:
+        core-sw-01.example.com:
+          ansible_host: 10.0.0.1
+          device_type: switch
+          role: core
+    
+    distribution_layer:
+      hosts:
+        dist-sw-01.example.com:
+          ansible_host: 10.0.1.1
+          device_type: switch
+          role: distribution
+    
+    access_layer:
+      hosts:
+        access-sw-01.example.com:
+          ansible_host: 10.0.2.1
+          device_type: switch
+          role: access
+          ports: 48

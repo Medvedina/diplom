@@ -1,7 +1,7 @@
-from flask import Blueprint, render_template, jsonify
-import os
-import yaml
+from flask import Blueprint, render_template, jsonify, request, current_app
 from datetime import datetime
+import os
+import json
 
 bp = Blueprint('dashboard', __name__)
 
@@ -17,6 +17,126 @@ def set_active_tab(tab_name):
         return decorated_function
     return decorator
 
+def read_recent_events_from_file():
+    """Читает события из файла recent_events.json"""
+    try:
+        # Определяем путь к файлу
+        base_dir = current_app.config.get('BASE_DIR', os.getcwd())
+        events_file = os.path.join(base_dir, 'ansible_data', 'recent_events.json')
+        
+        print(f"Пытаемся прочитать файл событий: {events_file}")
+        print(f"Файл существует: {os.path.exists(events_file)}")
+        
+        if not os.path.exists(events_file):
+            print("Файл не найден, возвращаем пустой список")
+            return []
+        
+        # Читаем файл
+        with open(events_file, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+            
+            if not content:
+                print("Файл пустой")
+                return []
+            
+            try:
+                events = json.loads(content)
+                print(f"Успешно загружено {len(events)} событий из файла")
+                
+                # Форматируем для отображения
+                formatted_events = []
+                for event in events[:10]:  # Берем последние 10
+                    # Преобразуем timestamp в время
+                    event_time = "??:??"
+                    if 'timestamp' in event:
+                        try:
+                            dt = datetime.fromisoformat(event['timestamp'].replace('Z', '+00:00'))
+                            event_time = dt.strftime('%H:%M')
+                        except:
+                            pass
+                    elif 'display_time' in event:
+                        event_time = event['display_time']
+                    
+                    # Определяем иконку и цвет по типу действия
+                    icon, color = get_action_icon_and_color(event.get('action', ''))
+                    
+                    formatted_events.append({
+                        'time': event_time,
+                        'title': get_action_title(event.get('action', ''), event.get('inventory', 'Unknown')),
+                        'description': event.get('comment', 'Без комментария'),
+                        'user': event.get('user', 'admin'),
+                        'icon': icon,
+                        'color': color,
+                        'badge': get_action_badge(event.get('action', '')),
+                        'raw_event': event  # Для отладки
+                    })
+                
+                print(f"Отформатировано {len(formatted_events)} событий")
+                return formatted_events
+                
+            except json.JSONDecodeError as e:
+                print(f"Ошибка JSON в файле: {e}")
+                return []
+                
+    except Exception as e:
+        print(f"Ошибка чтения файла событий: {e}")
+        import traceback
+        traceback.print_exc()
+        return []
+
+def get_action_icon_and_color(action):
+    """Возвращает иконку и цвет для действия"""
+    icons_colors = {
+        'create': ('bi-plus-circle', 'success'),
+        'edit': ('bi-pencil', 'warning'),
+        'delete': ('bi-trash', 'danger'),
+        'clone': ('bi-copy', 'info'),
+        'export': ('bi-download', 'primary'),
+        'import': ('bi-upload', 'secondary'),
+        'validate': ('bi-check-circle', 'success')
+    }
+    return icons_colors.get(action, ('bi-file-earmark', 'secondary'))
+
+def get_action_title(action, inventory):
+    """Возвращает заголовок для действия"""
+    titles = {
+        'create': f'Создан инвентарь: {inventory}',
+        'edit': f'Изменен инвентарь: {inventory}',
+        'delete': f'Удален инвентарь: {inventory}',
+        'clone': f'Клонирован инвентарь: {inventory}',
+        'export': f'Экспортирован инвентарь: {inventory}',
+        'import': f'Импортирован инвентарь: {inventory}',
+        'validate': f'Проверен инвентарь: {inventory}'
+    }
+    return titles.get(action, f'Действие с инвентарем: {inventory}')
+
+def get_action_badge(action):
+    """Возвращает текст бейджа для действия"""
+    badges = {
+        'create': 'Создание',
+        'edit': 'Изменение',
+        'delete': 'Удаление',
+        'clone': 'Клонирование',
+        'export': 'Экспорт',
+        'import': 'Импорт',
+        'validate': 'Проверка'
+    }
+    return badges.get(action, 'Действие')
+
+def get_demo_events():
+    """Возвращает демо события если нет реальных"""
+    return [
+        {
+            'time': datetime.now().strftime('%H:%M'),
+            'title': 'Создан тестовый инвентарь',
+            'description': 'Это демо-событие. Создайте реальный инвентарь',
+            'user': 'system',
+            'icon': 'bi-info-circle',
+            'color': 'info',
+            'badge': 'Демо'
+        }
+    ]
+
 @bp.route('/')
 @set_active_tab('dashboard')
 def index():
@@ -30,14 +150,15 @@ def index():
         'last_activity': datetime.now().strftime('%H:%M:%S')
     }
     
-    # Последние события
-    recent_events = [
-        {'time': '10:25', 'host': 'web1.test.local', 'action': 'Проверка', 'status': 'success'},
-        {'time': '10:20', 'host': 'db2.test.local', 'action': 'Обновление', 'status': 'warning'},
-        {'time': '10:15', 'host': 'lb1.test.local', 'action': 'Перезагрузка', 'status': 'success'},
-        {'time': '10:10', 'host': 'dev1.test.local', 'action': 'Мониторинг', 'status': 'success'},
-        {'time': '10:05', 'host': 'web2.test.local', 'action': 'Проверка', 'status': 'error'},
-    ]
+    # Читаем реальные события из файла
+    recent_events = read_recent_events_from_file()
+    
+    # Если нет реальных событий, показываем демо
+    if not recent_events:
+        print("Нет реальных событий, показываем демо")
+        recent_events = get_demo_events()
+    
+    print(f"Всего событий для шаблона: {len(recent_events)}")
     
     return render_template('dashboard/index.html',
                          stats=stats,
@@ -50,11 +171,29 @@ def overview():
     return render_template('dashboard/overview.html')
 
 @bp.route('/api/system-stats')
-@set_active_tab('dashboard')
 def api_system_stats():
     """API для получения статистики системы"""
     import psutil
     import platform
+    
+    # Считаем реальное количество инвентарей
+    inventories_count = 0
+    playbooks_count = 0
+    
+    try:
+        base_dir = current_app.config.get('BASE_DIR', os.getcwd())
+        inventories_path = os.path.join(base_dir, 'ansible_data', 'inventories')
+        playbooks_path = os.path.join(base_dir, 'ansible_data', 'playbooks')
+        
+        if os.path.exists(inventories_path):
+            inventories_count = len([f for f in os.listdir(inventories_path) 
+                                   if f.endswith(('.yaml', '.yml'))])
+        
+        if os.path.exists(playbooks_path):
+            playbooks_count = len([f for f in os.listdir(playbooks_path) 
+                                 if f.endswith(('.yaml', '.yml', '.yml'))])
+    except:
+        pass
     
     stats = {
         'system': {
@@ -65,10 +204,36 @@ def api_system_stats():
             'memory_used': psutil.virtual_memory().used,
         },
         'ansible': {
-            'inventories': len(os.listdir('ansible_data/inventories')),
-            'playbooks': len(os.listdir('ansible_data/playbooks')),
+            'inventories': inventories_count,
+            'playbooks': playbooks_count,
         },
         'timestamp': datetime.now().isoformat()
     }
     
     return jsonify(stats)
+
+@bp.route('/api/recent-events')
+def api_recent_events():
+    """API для получения последних событий через AJAX"""
+    try:
+        limit = request.args.get('limit', 10, type=int)
+        
+        # Читаем события из файла
+        events = read_recent_events_from_file()
+        
+        # Ограничиваем количество
+        events = events[:limit]
+        
+        return jsonify({
+            'success': True,
+            'events': events,
+            'total': len(events),
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        print(f"Ошибка в API recent-events: {e}")
+        return jsonify({
+            'success': False, 
+            'message': str(e),
+            'events': get_demo_events()
+        })

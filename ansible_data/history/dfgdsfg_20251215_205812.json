@@ -1,0 +1,15 @@
+{
+  "inventory": "dfgdsfg",
+  "action": "create",
+  "user": "admin",
+  "timestamp": "2025-12-15T20:58:12.144287",
+  "comment": "Создан новый инвентарь",
+  "changes": {
+    "description": "",
+    "template": "network_base"
+  },
+  "metadata": {
+    "ip": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 YaBrowser/25.10.0.0 Safari/537.36"
+  }
+}

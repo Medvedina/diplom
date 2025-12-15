@@ -5,12 +5,30 @@ from flask import current_app, request
 
 class InventoryHistory:
     """Класс для управления историей изменений инвентарей"""
+    @staticmethod
+    def _get_base_path():
+        """Возвращает базовый путь к директории данных"""
+        try:
+            # Пробуем получить из конфигурации
+            base_path = current_app.config.get('BASE_DIR', '')
+            if base_path:
+                return base_path
+            
+            # Или определяем относительно текущего файла
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            project_root = os.path.dirname(os.path.dirname(current_dir))
+            return project_root
+            
+        except:
+            # По умолчанию текущая директория
+            return os.getcwd()
     
     @staticmethod
     def log_change(inventory_name, action, user="admin", comment="", changes=None):
         """Логирует изменение инвентаря"""
         try:
-            history_dir = current_app.config.get('HISTORY_PATH', 'ansible_data/history')
+            base_path = InventoryHistory._get_base_path()
+            history_dir = os.path.join(base_path, 'ansible_data', 'history')
             os.makedirs(history_dir, exist_ok=True)
             
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -18,15 +36,11 @@ class InventoryHistory:
             
             history_entry = {
                 'inventory': inventory_name,
-                'action': action,  # create, edit, delete, clone, export
+                'action': action,
                 'user': user,
                 'timestamp': datetime.now().isoformat(),
                 'comment': comment,
-                'changes': changes or {},
-                'metadata': {
-                    'ip': request.remote_addr if 'request' in globals() else '127.0.0.1',
-                    'user_agent': request.headers.get('User-Agent', '') if 'request' in globals() else ''
-                }
+                'changes': changes or {}
             }
             
             with open(history_file, 'w', encoding='utf-8') as f:
@@ -35,29 +49,42 @@ class InventoryHistory:
             # Также добавляем в общий лог
             InventoryHistory._add_to_recent_log(history_entry)
             
+            print(f"✓ Запись добавлена в историю: {inventory_name} - {action}")
             return True
+            
         except Exception as e:
-            current_app.logger.error(f"Error logging inventory change: {e}")
+            print(f"✗ Ошибка логирования: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     @staticmethod
     def _add_to_recent_log(entry):
         """Добавляет запись в файл последних событий"""
         try:
-            recent_file = current_app.config.get('RECENT_EVENTS_FILE', 'ansible_data/recent_events.json')
+            base_path = InventoryHistory._get_base_path()
+            recent_file = os.path.join(base_path, 'ansible_data', 'recent_events.json')
+            
+            # Создаем директорию если нужно
+            os.makedirs(os.path.dirname(recent_file), exist_ok=True)
             
             # Читаем существующие события
             events = []
             if os.path.exists(recent_file):
-                with open(recent_file, 'r', encoding='utf-8') as f:
-                    try:
+                try:
+                    with open(recent_file, 'r', encoding='utf-8') as f:
                         events = json.load(f)
-                    except json.JSONDecodeError:
-                        events = []
+                        if not isinstance(events, list):
+                            events = []
+                except json.JSONDecodeError:
+                    events = []
+                except Exception as e:
+                    print(f"Ошибка чтения файла событий: {e}")
+                    events = []
             
-            # Добавляем новое событие в начало
-            events.insert(0, {
-                'id': f"inv_{datetime.now().timestamp()}",
+            # Создаем новое событие
+            new_event = {
+                'id': f"inv_{int(datetime.now().timestamp())}",
                 'type': 'inventory',
                 'action': entry['action'],
                 'inventory': entry['inventory'],
@@ -67,19 +94,70 @@ class InventoryHistory:
                 'display_time': datetime.now().strftime('%H:%M'),
                 'icon': InventoryHistory._get_action_icon(entry['action']),
                 'color': InventoryHistory._get_action_color(entry['action'])
-            })
+            }
             
-            # Ограничиваем количество записей (последние 100)
-            events = events[:100]
+            # Добавляем в начало
+            events.insert(0, new_event)
+            
+            # Ограничиваем количество (последние 50)
+            events = events[:50]
             
             # Сохраняем обратно
             with open(recent_file, 'w', encoding='utf-8') as f:
                 json.dump(events, f, ensure_ascii=False, indent=2)
             
+            print(f"✓ Событие добавлено в recent_events.json: {entry['inventory']}")
             return True
+            
         except Exception as e:
-            current_app.logger.error(f"Error adding to recent log: {e}")
+            print(f"✗ Ошибка добавления в лог: {e}")
+            import traceback
+            traceback.print_exc()
             return False
+    
+    @staticmethod
+    def get_recent_events(limit=10):
+        """Получает последние события"""
+        try:
+            base_path = InventoryHistory._get_base_path()
+            recent_file = os.path.join(base_path, 'ansible_data', 'recent_events.json')
+            
+            print(f"Пытаемся прочитать файл: {recent_file}")
+            print(f"Файл существует: {os.path.exists(recent_file)}")
+            
+            if not os.path.exists(recent_file):
+                print("Файл recent_events.json не найден, возвращаем пустой список")
+                return []
+            
+            # Читаем файл
+            with open(recent_file, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                
+                if not content:
+                    print("Файл recent_events.json пустой")
+                    return []
+                
+                try:
+                    events = json.loads(content)
+                    if not isinstance(events, list):
+                        print("Данные не являются списком, исправляем")
+                        events = []
+                    
+                    print(f"Успешно загружено {len(events)} событий")
+                    return events[:limit]
+                    
+                except json.JSONDecodeError as e:
+                    print(f"Ошибка JSON в файле: {e}")
+                    # Создаем новый правильный файл
+                    with open(recent_file, 'w', encoding='utf-8') as f:
+                        json.dump([], f, indent=2)
+                    return []
+                    
+        except Exception as e:
+            print(f"Критическая ошибка чтения событий: {e}")
+            import traceback
+            traceback.print_exc()
+            return []
     
     @staticmethod
     def _get_action_icon(action):
@@ -108,23 +186,6 @@ class InventoryHistory:
             'validate': 'success'
         }
         return colors.get(action, 'secondary')
-    
-    @staticmethod
-    def get_recent_events(limit=10):
-        """Получает последние события"""
-        try:
-            recent_file = current_app.config.get('RECENT_EVENTS_FILE', 'ansible_data/recent_events.json')
-            
-            if not os.path.exists(recent_file):
-                return []
-            
-            with open(recent_file, 'r', encoding='utf-8') as f:
-                events = json.load(f)
-            
-            return events[:limit]
-        except Exception as e:
-            current_app.logger.error(f"Error reading recent events: {e}")
-            return []
     
     @staticmethod
     def get_inventory_history(inventory_name, limit=20):

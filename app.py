@@ -18,6 +18,7 @@ app.config['TABS_CONFIG'] = {
 }
 app.config['HISTORY_PATH'] = 'ansible_data/history'
 app.config['RECENT_EVENTS_FILE'] = 'ansible_data/recent_events.json'
+app.config['BASE_DIR'] = '/'
 
 # Директории для хранения истории изменения инвентарей
 with app.app_context():

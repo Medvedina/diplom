@@ -1,0 +1,14 @@
+{
+  "inventory": "dfgdsfg",
+  "action": "delete",
+  "user": "admin",
+  "timestamp": "2025-12-15T21:02:59.103453",
+  "comment": "Инвентарь удален",
+  "changes": {
+    "content_length": 429
+  },
+  "metadata": {
+    "ip": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 YaBrowser/25.10.0.0 Safari/537.36"
+  }
+}

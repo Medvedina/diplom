@@ -119,14 +119,7 @@
                     </nav>
                     
                     <div class="btn-group" role="group">
-                        {% if active_tab == 'inventory' %}
-                            <button class="btn btn-outline-primary" onclick="refreshInventory()">
-                                <i class="bi bi-arrow-clockwise"></i> Обновить
-                            </button>
-                            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newInventoryModal">
-                                <i class="bi bi-plus-circle"></i> Новый инвентарь
-                            </button>
-                        {% elif active_tab == 'dashboard' %}
+                        {% if active_tab == 'dashboard' %}
                             <button class="btn btn-outline-secondary" onclick="refreshDashboard()">
                                 <i class="bi bi-arrow-clockwise"></i> Обновить дашборд
                             </button>
@@ -161,37 +154,6 @@
                         </div>
                     </div>
                 </footer>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно для нового инвентаря -->
-    <div class="modal fade" id="newInventoryModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Новый инвентарь</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="newInventoryForm">
-                        <div class="mb-3">
-                            <label for="inventoryName" class="form-label">Название инвентаря</label>
-                            <input type="text" class="form-control" id="inventoryName" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="inventoryType" class="form-label">Тип инвентаря</label>
-                            <select class="form-select" id="inventoryType">
-                                <option value="static">Статический (YAML)</option>
-                                <option value="dynamic">Динамический (скрипт)</option>
-                            </select>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="button" class="btn btn-primary" onclick="createInventory()">Создать</button>
-                </div>
             </div>
         </div>
     </div>

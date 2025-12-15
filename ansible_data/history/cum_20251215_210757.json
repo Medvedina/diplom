@@ -1,0 +1,55 @@
+{
+  "inventory": "cum",
+  "action": "edit",
+  "user": "admin",
+  "timestamp": "2025-12-15T21:07:57.766930",
+  "comment": "Изменения в инвентаре",
+  "changes": {
+    "added_hosts": [
+      {
+        "host": "dist-sw-01.example.com",
+        "group": "distribution_layer",
+        "vars": {
+          "ansible_host": "10.0.1.1",
+          "device_type": "switch",
+          "role": "distribution"
+        }
+      },
+      {
+        "host": "access-sw-01.example.com",
+        "group": "access_layer",
+        "vars": {
+          "ansible_host": "10.0.2.1",
+          "device_type": "switch",
+          "role": "access",
+          "ports": 48
+        }
+      },
+      {
+        "host": "core-sw-01.example.com",
+        "group": "core_layer",
+        "vars": {
+          "ansible_host": "10.0.0.1",
+          "device_type": "switch",
+          "role": "core"
+        }
+      }
+    ],
+    "removed_hosts": [],
+    "modified_hosts": [],
+    "added_groups": [
+      "core_layer",
+      "distribution_layer",
+      "access_layer"
+    ],
+    "removed_groups": [
+      "switches",
+      "routers"
+    ],
+    "modified_vars": []
+  },
+  "metadata": {
+    "ip": "127.0.0.1",
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 YaBrowser/25.10.0.0 Safari/537.36"
+  }
+}
