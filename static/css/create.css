@@ -1,0 +1,55 @@
+.inventory-builder {
+    min-height: 600px;
+}
+
+.device-icon {
+    font-size: 1.5rem;
+    margin-right: 10px;
+}
+
+.device-icon.router {
+    color: #dc3545;
+}
+
+.device-icon.switch {
+    color: #ffc107;
+}
+
+.device-icon.firewall {
+    color: #0dcaf0;
+}
+
+.device-icon.server {
+    color: #198754;
+}
+
+.group-badge {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.5rem;
+}
+
+.host-card {
+    border-left: 3px solid #6c757d;
+    transition: all 0.2s;
+}
+
+.host-card:hover {
+    border-left-color: #0d6efd;
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+.yaml-editor {
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.template-card {
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.template-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
+}

@@ -131,18 +131,83 @@ def api_check_hosts():
         })
     
     return jsonify({'results': results})
+
+# Добавляем в inventory.py новый маршрут после inventory_list()
+@bp.route('/api/debug/<inventory_name>')
+def api_debug_inventory(inventory_name):
+    """API для отладки - проверка сохраненного инвентаря"""
+    try:
+        inventory_path = current_app.config.get('INVENTORY_PATH', 'ansible_data/inventories')
+        file_path = os.path.join(inventory_path, f"{inventory_name}.yaml")
+        
+        if not os.path.exists(file_path):
+            return jsonify({'success': False, 'message': 'Инвентарь не найден'})
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Пытаемся распарсить
+        parsed = None
+        parse_error = None
+        try:
+            parsed = yaml.safe_load(content)
+        except yaml.YAMLError as e:
+            parse_error = str(e)
+        
+        return jsonify({
+            'success': True,
+            'name': inventory_name,
+            'file_path': file_path,
+            'file_size': os.path.getsize(file_path),
+            'content_length': len(content),
+            'content_preview': content[:500] + "..." if len(content) > 500 else content,
+            'parsed': parsed is not None,
+            'parse_error': parse_error,
+            'structure': parsed
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Debug error: {e}")
+        return jsonify({'success': False, 'message': str(e)})
+    
+@bp.route('/create')
+@set_active_tab('inventory')
+def inventory_create():
+    """Страница создания инвентаря с визуальным конструктором"""
+    return render_template('inventory/create.html')
+
+#API для создания инвентаря
+
 @bp.route('/api/create', methods=['POST'])
 def api_create_inventory():
-    """API для создания нового инвентаря"""
+    """API для создания нового инвентаря - УПРОЩЕННАЯ ВЕРСИЯ"""
     try:
-        data = request.json
+        # Получаем данные
+        data = request.get_json()
+        
+        if not data:
+            current_app.logger.error("No JSON data received")
+            return jsonify({'success': False, 'message': 'Отсутствуют данные'})
+        print('ДАТА', data)
         inventory_name = data.get('name', '').strip()
         description = data.get('description', '')
+        yaml_content = data.get('content', '')  # YAML из предпросмотра
+        print('ЯМЛЬ КОНТЕНТ\n', yaml_content)
+
+        # ВАЖНО: Логируем то, что получаем
+        current_app.logger.info(f"=== Создание инвентаря '{inventory_name}' ===")
+        current_app.logger.info(f"Описание: {description}")
+        current_app.logger.info(f"Длина YAML контента: {len(yaml_content)}")
         
+        # Берем первые 500 символов YAML для отладки
+        if yaml_content:
+            preview = yaml_content[:500] + "..." if len(yaml_content) > 500 else yaml_content
+            current_app.logger.info(f"YAML (первые 500 символов):\n{preview}")
+        
+        # Валидация имени
         if not inventory_name:
             return jsonify({'success': False, 'message': 'Название инвентаря обязательно'})
         
-        # Проверяем допустимость имени
         if not re.match(r'^[a-zA-Z0-9_\-]+$', inventory_name):
             return jsonify({'success': False, 'message': 'Недопустимые символы в названии'})
         
@@ -153,68 +218,123 @@ def api_create_inventory():
         if os.path.exists(file_path):
             return jsonify({'success': False, 'message': 'Инвентарь с таким именем уже существует'})
         
-        # Создаем базовую структуру для сетевого оборудования
-        base_inventory = {
-            'all': {
-                'vars': {
-                    'ansible_network_os': 'ios',
-                    'ansible_connection': 'network_cli',
-                    'ansible_user': 'admin',
-                    'ansible_ssh_private_key_file': '~/.ssh/id_rsa',
-                    'ansible_become': 'yes',
-                    'ansible_become_method': 'enable'
-                },
-                'children': {
-                    'routers': {
-                        'hosts': {},
-                        'vars': {
-                            'device_type': 'router',
-                            'description': 'Маршрутизаторы'
-                        }
+        # ГЛАВНОЕ ИЗМЕНЕНИЕ: Всегда используем переданный YAML из предпросмотра
+        if not yaml_content or yaml_content.strip() == '':
+            current_app.logger.warning("Пустой YAML контент, создаю базовую структуру")
+            # Создаем минимальную структуру
+            base_yaml = {
+                'all': {
+                    'vars': {
+                        'ansible_network_os': 'ios',
+                        'ansible_connection': 'network_cli',
+                        'ansible_user': 'admin',
+                        'ansible_ssh_private_key_file': '~/.ssh/id_rsa'
                     },
-                    'switches': {
-                        'hosts': {},
-                        'vars': {
-                            'device_type': 'switch',
-                            'description': 'Коммутаторы'
-                        }
-                    }
+                    'children': {}
                 }
             }
-        }
+            
+            if description:
+                base_yaml['all']['vars']['inventory_description'] = description
+            
+            yaml_content = yaml.dump(base_yaml, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            current_app.logger.info(f"Сгенерирован базовый YAML:\n{yaml_content}")
+        else:
+            # Проверяем валидность полученного YAML
+            try:
+                parsed = yaml.safe_load(yaml_content)
+                current_app.logger.info(f"YAML успешно распарсен, структура: {type(parsed)}")
+                
+                if not parsed:
+                    current_app.logger.error("Распарсенный YAML пуст")
+                    return jsonify({'success': False, 'message': 'Пустой YAML контент'})
+                
+                # Простая проверка структуры
+                if not isinstance(parsed, dict):
+                    current_app.logger.error(f"YAML должен быть словарем, получен: {type(parsed)}")
+                    return jsonify({'success': False, 'message': 'Некорректная структура YAML'})
+                
+                # Если есть 'all' - проверяем его структуру
+                if 'all' in parsed:
+                    if not isinstance(parsed['all'], dict):
+                        current_app.logger.error("Ключ 'all' должен быть словарем")
+                        return jsonify({'success': False, 'message': "Ключ 'all' должен быть словарем"})
+                    
+                    # Проверяем наличие 'children'
+                    if 'children' not in parsed['all']:
+                        current_app.logger.warning("Отсутствует ключ 'children', добавляю")
+                        parsed['all']['children'] = {}
+                    
+                    # Проверяем наличие 'vars'
+                    if 'vars' not in parsed['all']:
+                        current_app.logger.warning("Отсутствует ключ 'vars', добавляю")
+                        parsed['all']['vars'] = {}
+                    
+                    # Добавляем недостающие обязательные переменные
+                    required_vars = {
+                        'ansible_network_os': 'ios',
+                        'ansible_connection': 'network_cli',
+                        'ansible_user': 'admin',
+                        'ansible_ssh_private_key_file': '~/.ssh/id_rsa'
+                    }
+                    
+                    for var_name, default_value in required_vars.items():
+                        if var_name not in parsed['all']['vars']:
+                            parsed['all']['vars'][var_name] = default_value
+                            current_app.logger.info(f"Добавлена переменная: {var_name} = {default_value}")
+                    
+                    # Добавляем описание если оно было в форме
+                    if description and 'inventory_description' not in parsed['all']['vars']:
+                        parsed['all']['vars']['inventory_description'] = description
+                    
+                    # Пересоздаем YAML с исправлениями
+                    yaml_content = yaml.dump(parsed, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                
+            except yaml.YAMLError as e:
+                current_app.logger.error(f"Ошибка парсинга YAML: {str(e)}")
+                # Пробуем сохранить как есть, возможно это валидный YAML
+                current_app.logger.warning("Сохраняю YAML как есть, несмотря на ошибку парсинга")
         
-        # Добавляем описание если есть
-        if description:
-            base_inventory['all']['vars']['inventory_description'] = description
+        # Создаем директорию если не существует
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         
-        # Сохраняем YAML файл
+        # Сохраняем файл
         with open(file_path, 'w', encoding='utf-8') as f:
-            yaml.dump(base_inventory, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            f.write(yaml_content)
         
+        # Проверяем, что файл создан
+        if os.path.exists(file_path):
+            file_size = os.path.getsize(file_path)
+            current_app.logger.info(f"Файл сохранен: {file_path}, размер: {file_size} байт")
+            
+            # Читаем обратно для проверки
+            with open(file_path, 'r', encoding='utf-8') as f:
+                saved_content = f.read()
+            
+            current_app.logger.info(f"Проверка сохраненного файла, первые 500 символов:\n{saved_content[:500]}...")
+        else:
+            current_app.logger.error(f"Файл не был создан: {file_path}")
+            return jsonify({'success': False, 'message': 'Ошибка создания файла'})
+        
+        # Логируем создание
         InventoryHistory.log_change(
             inventory_name=inventory_name,
             action='create',
-            user='admin',  # В реальном приложении получать из сессии
-            comment=f"Создан новый инвентарь: {description}" if description else "Создан новый инвентарь",
-            changes={
-                'description': description,
-                'template': 'network_base'
-            }
+            user='admin',
+            comment=f"Создан через визуальный конструктор" + (f": {description}" if description else ""),
+            changes={'method': 'visual_editor', 'content_length': len(yaml_content)}
         )
         
         return jsonify({
             'success': True, 
-            'message': 'Инвентарь создан',
+            'message': 'Инвентарь успешно создан',
             'path': file_path,
-            'name': inventory_name
+            'name': inventory_name,
+            'content_preview': yaml_content[:200] + "..." if len(yaml_content) > 200 else yaml_content
         })
         
     except Exception as e:
-        current_app.logger.error(f"Error creating inventory: {e}")
-        return jsonify({'success': False, 'message': f'Ошибка создания: {str(e)}'})
-        
-    except Exception as e:
-        current_app.logger.error(f"Error creating inventory: {e}")
+        current_app.logger.error(f"Критическая ошибка при создании инвентаря: {e}", exc_info=True)
         return jsonify({'success': False, 'message': f'Ошибка создания: {str(e)}'})
     
 # API для получения содержимого инвентаря для редактирования

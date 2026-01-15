@@ -1,0 +1,30 @@
+all:
+  vars:
+    ansible_network_os: ios
+    ansible_connection: network_cli
+    ansible_user: admin
+    ansible_ssh_private_key_file: ~/.ssh/id_rsa
+    inventory_description: Инвентарь сетевого оборудования
+  children:
+    core_routers:
+      hosts:
+        core-routers-01:
+          ansible_host: 10.1.1.1
+          device_type: router
+          location: Москва, ЦОД-1
+        core-routers-02:
+          ansible_host: 10.1.2.1
+          device_type: router
+          location: Москва, ЦОД-1
+      vars: {}
+    distribution_switches:
+      hosts:
+        distribution-switches-01:
+          ansible_host: 10.2.1.1
+          device_type: switch
+          location: СПб, офис
+        distribution-switches-02:
+          ansible_host: 10.2.2.1
+          device_type: switch
+          location: СПб, офис
+      vars: {}

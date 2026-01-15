@@ -8,7 +8,6 @@
 
 {% block content %}
 <div class="container-fluid">
-    <!-- Заголовок и кнопки действий -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h1 class="h3 mb-0 text-gray-800">
@@ -17,135 +16,14 @@
             <p class="text-muted mb-0">Управление инвентарными файлами для маршрутизаторов и коммутаторов</p>
         </div>
         <div class="btn-group">
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createInventoryModal">
+            <!-- ЗАМЕНЯЕМ эту кнопку -->
+            <a href="{{ url_for('inventory.inventory_create') }}" class="btn btn-primary">
                 <i class="bi bi-plus-circle me-1"></i>Создать инвентарь
-            </button>
+            </a>
             <button type="button" class="btn btn-outline-success" onclick="quickNetworkInventory()">
                 <i class="bi bi-lightning me-1"></i>Быстрый шаблон
             </button>
         </div>
-    </div>
-
-    <!-- Карточки инвентарей -->
-    <div class="row">
-        {% for inventory in inventories %}
-        <div class="col-xl-4 col-lg-6 col-md-6 mb-4">
-            <div class="card border-left-primary shadow h-100">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="d-flex align-items-center mb-2">
-                                <div class="h5 mb-0 font-weight-bold text-gray-800">
-                                    <i class="bi bi-folder2-open text-primary me-2"></i>
-                                    {{ inventory.name }}
-                                </div>
-                                <span class="badge bg-info ms-2" title="{{ inventory.modified }}">
-                                    {{ inventory.modified[:10].replace('-', '.') }}
-                                </span>
-                            </div>
-                            
-                            <!-- Статистика оборудования -->
-                            <div class="row mb-3">
-                                <div class="col-6">
-                                    <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                        Устройств
-                                    </div>
-                                    <div class="h5 mb-0">
-                                        {% set inv_data = load_inventory(inventory.name) %}
-                                        {% if inv_data and inv_data.all and inv_data.all.children %}
-                                            {% set device_count = 0 %}
-                                            {% set router_count = 0 %}
-                                            {% set switch_count = 0 %}
-                                            {% for group in inv_data.all.children.values() %}
-                                                {% if group.hosts %}
-                                                    {% set device_count = device_count + group.hosts|length %}
-                                                    {% for host_vars in group.hosts.values() %}
-                                                        {% if host_vars.device_type == 'router' %}
-                                                            {% set router_count = router_count + 1 %}
-                                                        {% elif host_vars.device_type == 'switch' %}
-                                                            {% set switch_count = switch_count + 1 %}
-                                                        {% endif %}
-                                                    {% endfor %}
-                                                {% endif %}
-                                            {% endfor %}
-                                            <span class="badge bg-primary rounded-pill">{{ device_count }}</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary rounded-pill">0</span>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                                <div class="col-6">
-                                    <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                                        Групп
-                                    </div>
-                                    <div class="h5 mb-0">
-                                        {% if inv_data and inv_data.all and inv_data.all.children %}
-                                            <span class="badge bg-success rounded-pill">{{ inv_data.all.children|length }}</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary rounded-pill">0</span>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- Типы оборудования -->
-                            {% if router_count > 0 or switch_count > 0 %}
-                            <div class="mb-3">
-                                {% if router_count > 0 %}
-                                    <span class="badge bg-danger me-1">
-                                        <i class="bi bi-router"></i> {{ router_count }} роутеров
-                                    </span>
-                                {% endif %}
-                                {% if switch_count > 0 %}
-                                    <span class="badge bg-warning me-1">
-                                        <i class="bi bi-hdd-stack"></i> {{ switch_count }} коммутаторов
-                                    </span>
-                                {% endif %}
-                            </div>
-                            {% endif %}
-                            
-                            <div class="small text-muted mb-2">
-                                <i class="bi bi-clock me-1"></i>
-                                Изменен: {{ inventory.modified }}
-                            </div>
-                        </div>
-                        <div class="col-auto">
-                            <i class="bi bi-diagram-3 fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-footer bg-transparent border-top-0 pt-0">
-                    <div class="btn-group w-100">
-                        <a href="{{ url_for('inventory.inventory_detail', inventory_name=inventory.name) }}" 
-                           class="btn btn-sm btn-outline-primary">
-                            <i class="bi bi-eye me-1"></i>Просмотр
-                        </a>
-                        <button class="btn btn-sm btn-outline-warning" 
-                                onclick="editInventory('{{ inventory.name }}')">
-                            <i class="bi bi-pencil me-1"></i>Редактировать
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-danger" 
-                                onclick="deleteInventory('{{ inventory.name }}')">
-                            <i class="bi bi-trash me-1"></i>Удалить
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% else %}
-        <div class="col-12">
-            <div class="card shadow">
-                <div class="card-body text-center py-5">
-                    <i class="bi bi-router display-1 text-muted mb-3"></i>
-                    <h3 class="text-muted">Инвентари не найдены</h3>
-                    <p class="text-muted mb-4">Создайте первый инвентарь для сетевого оборудования</p>
-                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createInventoryModal">
-                        <i class="bi bi-plus-circle me-1"></i>Создать инвентарь
-                    </button>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
     </div>
 
     <!-- Таблица инвентарей -->
@@ -688,7 +566,7 @@ function deleteSelectedInventories() {
 
 // Быстрый шаблон сетевого инвентаря
 function quickNetworkInventory() {
-    document.getElementById('inventoryName').value = 'network_' + new Date().getTime();
+    const name = 'network_' + new Date().getTime();
     
     // Автоматически заполняем шаблоном для сетевого оборудования
     const templateYaml = `all:
@@ -732,10 +610,28 @@ function quickNetworkInventory() {
           device_type: switch
           ports: 24`;
     
-    document.getElementById('inventoryDescription').value = 
-        "Автоматически сгенерированный шаблон для сетевого оборудования";
-    
-    showAlert('Шаблон сетевого инвентаря загружен', 'info');
+    // Создаем инвентарь через API
+    fetch('/inventory/api/create', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name: name,
+            description: "Автоматически сгенерированный шаблон для сетевого оборудования",
+            content: templateYaml
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Сетевой шаблон создан!', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showAlert('Ошибка: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Ошибка сети: ' + error.message, 'error');
+    });
 }
 
 // Проверка YAML
