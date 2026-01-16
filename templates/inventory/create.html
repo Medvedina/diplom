@@ -430,14 +430,6 @@ document.addEventListener('DOMContentLoaded', function() {
     setTimeout(() => {
         addNewGroup();
         console.log('Default group added');
-        
-        // Восстанавливаем черновик если есть
-        setTimeout(() => {
-            const shouldRestore = confirm('Восстановить последний черновик?');
-            if (shouldRestore) {
-                restoreDraft();
-            }
-        }, 500);
     }, 100);
     
     // Автосохранение черновика каждые 30 секунд
@@ -1238,8 +1230,7 @@ function autoSaveDraft() {
     }
 }
 
-// Восстановление черновика при загрузке
-// Восстановление черновика при загрузке
+
 // Восстановление черновика при загрузке
 function restoreDraft() {
     try {
@@ -1437,10 +1428,6 @@ function showAlert(message, type) {
     }, 5000);
 }
 
-// Восстановление черновика при загрузке страницы
-window.addEventListener('load', function() {
-    setTimeout(restoreDraft, 100);
-});
 // Инициализация
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded, initializing inventory creator');
@@ -1486,14 +1473,6 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('networkOS').addEventListener('change', generateYaml);
     document.getElementById('connectionType').addEventListener('change', generateYaml);
     
-    // Восстанавливаем черновик с задержкой для гарантии загрузки DOM
-    setTimeout(() => {
-        const shouldRestore = localStorage.getItem('restore_draft') !== 'false';
-        if (shouldRestore) {
-            restoreDraft();
-        }
-        localStorage.setItem('restore_draft', 'true'); // Восстанавливать в следующий раз
-    }, 500);
 });
 </script>
 
