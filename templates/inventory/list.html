@@ -20,9 +20,6 @@
             <a href="{{ url_for('inventory.inventory_create') }}" class="btn btn-primary">
                 <i class="bi bi-plus-circle me-1"></i>Создать инвентарь
             </a>
-            <button type="button" class="btn btn-outline-success" onclick="quickNetworkInventory()">
-                <i class="bi bi-lightning me-1"></i>Быстрый шаблон
-            </button>
         </div>
     </div>
 
@@ -83,13 +80,14 @@
                             </td>
                             <td>
                                 {% if inv_data and inv_data.all and inv_data.all.children %}
-                                    {% set device_count = 0 %}
-                                    {% for group in inv_data.all.children.values() %}
-                                        {% if group.hosts %}
-                                            {% set device_count = device_count + group.hosts|length %}
+                                    {% set ns = namespace(device_count=0) %}
+                                    {% for group_name, group_data in inv_data.all.children.items() %}
+                                        {% if group_data.hosts %}
+                                            {% set ns.device_count = ns.device_count + group_data.hosts|length %}
+                                            <!-- Группа {{ group_name }}: {{ group_data.hosts|length }} хостов -->
                                         {% endif %}
                                     {% endfor %}
-                                    <span class="badge bg-primary">{{ device_count }}</span>
+                                    <span class="badge bg-primary">{{ ns.device_count }}</span>
                                 {% else %}
                                     <span class="badge bg-secondary">0</span>
                                 {% endif %}
@@ -253,6 +251,7 @@
 
 <!-- JavaScript для управления инвентарями -->
 <script>
+    
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', function() {
     // Выделение всех чекбоксов
@@ -263,6 +262,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 });
+
 
 // Создание инвентаря
 function createInventory() {
@@ -564,76 +564,6 @@ function deleteSelectedInventories() {
     });
 }
 
-// Быстрый шаблон сетевого инвентаря
-function quickNetworkInventory() {
-    const name = 'network_' + new Date().getTime();
-    
-    // Автоматически заполняем шаблоном для сетевого оборудования
-    const templateYaml = `all:
-  vars:
-    ansible_network_os: ios
-    ansible_connection: network_cli
-    ansible_user: admin
-    ansible_ssh_private_key_file: ~/.ssh/id_rsa
-  
-  children:
-    core_routers:
-      hosts:
-        core-router-01.example.com:
-          ansible_host: 10.0.1.1
-          device_type: router
-          location: "Москва, ЦОД-1"
-        core-router-02.example.com:
-          ansible_host: 10.0.1.2
-          device_type: router
-          location: "Москва, ЦОД-2"
-    
-    distribution_switches:
-      hosts:
-        dist-switch-01.example.com:
-          ansible_host: 10.0.2.1
-          device_type: switch
-          model: "Cisco Catalyst 9300"
-        dist-switch-02.example.com:
-          ansible_host: 10.0.2.2
-          device_type: switch
-          model: "Cisco Catalyst 9300"
-    
-    access_switches:
-      hosts:
-        access-switch-01.example.com:
-          ansible_host: 10.0.3.1
-          device_type: switch
-          ports: 48
-        access-switch-02.example.com:
-          ansible_host: 10.0.3.2
-          device_type: switch
-          ports: 24`;
-    
-    // Создаем инвентарь через API
-    fetch('/inventory/api/create', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            name: name,
-            description: "Автоматически сгенерированный шаблон для сетевого оборудования",
-            content: templateYaml
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showAlert('Сетевой шаблон создан!', 'success');
-            setTimeout(() => window.location.reload(), 1000);
-        } else {
-            showAlert('Ошибка: ' + data.message, 'error');
-        }
-    })
-    .catch(error => {
-        showAlert('Ошибка сети: ' + error.message, 'error');
-    });
-}
-
 // Проверка YAML
 function validateYaml(inventoryName) {
     const yamlContent = document.getElementById('inventoryYaml').value;
@@ -656,24 +586,6 @@ function validateYaml(inventoryName) {
     });
 }
 
-// Автосохранение черновика
-function autoSaveDraft(inventoryName) {
-    const yamlContent = document.getElementById('inventoryYaml').value;
-    
-    // Сохраняем в localStorage
-    localStorage.setItem(`draft_${inventoryName}`, yamlContent);
-    console.log('Черновик автосохранен');
-}
-
-// Восстановление черновика при загрузке
-function restoreDraft(inventoryName) {
-    const draft = localStorage.getItem(`draft_${inventoryName}`);
-    if (draft && document.getElementById('inventoryYaml')) {
-        document.getElementById('inventoryYaml').value = draft;
-        showAlert('Восстановлен последний черновик', 'info');
-    }
-}
-
 // Утилита для показа уведомлений
 function showAlert(message, type) {
     const alertDiv = document.createElement('div');
@@ -694,6 +606,7 @@ function showAlert(message, type) {
         if (alertDiv.parentElement) alertDiv.remove();
     }, 5000);
 }
+
 </script>
 
 <style>

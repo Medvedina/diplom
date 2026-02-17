@@ -74,10 +74,31 @@ def load_inventory(inventory_name):
     """Загрузка инвентаря из YAML файла"""
     try:
         path = os.path.join(app.config['INVENTORY_PATH'], f"{inventory_name}.yaml")
-        with open(path, 'r') as f:
-            return yaml.safe_load(f)
+        print(f"Загрузка инвентаря из: {path}")
+        
+        with open(path, 'r', encoding='utf-8') as f:
+            content = f.read()
+            print(f"Содержимое файла {inventory_name}:\n{content[:200]}...")  # Первые 200 символов
+            
+            data = yaml.safe_load(content)
+            print(f"Загружена структура: {type(data)}")
+            
+            if data and 'all' in data:
+                print(f"Ключи в all: {data['all'].keys() if isinstance(data['all'], dict) else 'Нет'}")
+                
+                if 'children' in data['all']:
+                    print(f"Группы: {list(data['all']['children'].keys())}")
+                    
+                    # Проверяем хосты в группах
+                    for group_name, group_data in data['all']['children'].items():
+                        if group_data and 'hosts' in group_data:
+                            print(f"  Группа {group_name}: {len(group_data['hosts'])} хостов")
+            
+            return data
     except Exception as e:
-        print(f"Error loading inventory: {e}")
+        print(f"Ошибка загрузки инвентаря {inventory_name}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 def list_inventories():

@@ -23,9 +23,6 @@
             <button type="button" class="btn btn-outline-secondary" onclick="goBackToList()">
                 <i class="bi bi-arrow-left me-1"></i>Назад к списку
             </button>
-            <button type="button" class="btn btn-outline-success" onclick="loadTemplate('network')">
-                <i class="bi bi-lightning me-1"></i>Быстрый шаблон
-            </button>
         </div>
     </div>
 
@@ -245,34 +242,6 @@
                     </div>
                 </div>
             </div>
-            
-            <!-- Быстрые шаблоны -->
-            <div class="card shadow">
-                <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">
-                        <i class="bi bi-collection me-2"></i>Быстрые шаблоны
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div class="btn-group-vertical w-100" role="group">
-                        <button type="button" class="btn btn-outline-secondary text-start" onclick="loadTemplate('network')">
-                            <i class="bi bi-router me-2"></i>Сетевое оборудование
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary text-start" onclick="loadTemplate('datacenter')">
-                            <i class="bi bi-hdd-rack me-2"></i>Дата-центр
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary text-start" onclick="loadTemplate('branch')">
-                            <i class="bi bi-building me-2"></i>Филиал/Кампус
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary text-start" onclick="loadTemplate('empty')">
-                            <i class="bi bi-file-earmark me-2"></i>Пустой шаблон
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Модальное окно импорта CSV -->
 <div class="modal fade" id="importModal" tabindex="-1">
@@ -309,65 +278,8 @@ host2,10.0.1.2,switches,switch,СПб"></textarea>
         </div>
     </div>
 </div>
-<!-- Добавьте этот блок в конец основного контента -->
-<div class="card shadow mt-4">
-    <div class="card-header py-3">
-        <h6 class="m-0 font-weight-bold text-primary">
-            <i class="bi bi-bug me-2"></i>Отладка
-        </h6>
-    </div>
-    <div class="card-body">
-        <div class="row">
-            <div class="col-md-4">
-                <div class="form-group">
-                    <label class="form-label">Статус YAML</label>
-                    <div id="yamlStatus" class="alert alert-info py-2">
-                        Не сгенерирован
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="form-group">
-                    <label class="form-label">Статус групп</label>
-                    <div id="groupsStatus" class="alert alert-info py-2">
-                        0 групп
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="form-group">
-                    <label class="form-label">Статус хостов</label>
-                    <div id="hostsStatus" class="alert alert-info py-2">
-                        0 хостов
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="updateDebugInfo()">
-            <i class="bi bi-arrow-clockwise me-1"></i>Обновить статус
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-info ms-2" onclick="console.log('Groups:', groups)">
-            <i class="bi bi-terminal me-1"></i>Лог групп
-        </button>
-    </div>
-</div>
 
 <script>
-// Функция для обновления отладочной информации
-function updateDebugInfo() {
-    // Статус YAML
-    const yamlContent = document.getElementById('yamlPreview').textContent.trim();
-    const yamlStatus = document.getElementById('yamlStatus');
-    if (yamlStatus) {
-        if (!yamlContent) {
-            yamlStatus.textContent = 'Пустой';
-            yamlStatus.className = 'alert alert-danger py-2';
-        } else {
-            yamlStatus.textContent = `${yamlContent.length} символов`;
-            yamlStatus.className = 'alert alert-success py-2';
-        }
-    }
     
     // Статус групп
     const groupsStatus = document.getElementById('groupsStatus');
@@ -387,7 +299,7 @@ function updateDebugInfo() {
         hostsStatus.textContent = `${totalHosts} хостов`;
         hostsStatus.className = totalHosts > 0 ? 'alert alert-success py-2' : 'alert alert-warning py-2';
     }
-}
+
 
 // Обновляем статус при изменениях
 document.addEventListener('DOMContentLoaded', function() {
@@ -1188,7 +1100,6 @@ function validateYaml() {
     });
 }
 
-// Автосохранение черновика
 // Автосохранение черновика
 function autoSaveDraft() {
     try {
