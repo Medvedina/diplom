@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block title %}Редактирование плейбука - Ansible Control Panel{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{{ url_for('playbooks.pb_list') }}">Плейбуки</a>
+    </li>
+    <li class="breadcrumb-item active">Редактирование</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="bi bi-pencil me-2"></i>Редактирование плейбука
+            </h1>
+            <p class="text-muted mb-0">{{ playbook_name }}</p>
+        </div>
+        <div class="btn-group">
+            <a href="{{ url_for('playbooks.pb_list') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Назад
+            </a>
+            <button class="btn btn-primary" onclick="savePlaybook()">
+                <i class="bi bi-save me-1"></i>Сохранить
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Форма редактирования -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-pencil-square me-2"></i>Редактор YAML
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <textarea id="yamlEditor" class="form-control font-monospace" rows="20" style="font-size: 0.875rem;">{{ yaml_content }}</textarea>
+                    <div class="mt-2 text-muted small">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Редактируйте YAML напрямую или используйте визуальный конструктор
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Инструменты -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-tools me-2"></i>Инструменты
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary" onclick="validateYaml()">
+                            <i class="bi bi-check-circle me-1"></i>Проверить YAML
+                        </button>
+                        <button class="btn btn-outline-success" onclick="formatYaml()">
+                            <i class="bi bi-braces me-1"></i>Форматировать
+                        </button>
+                        <button class="btn btn-outline-info" onclick="openVisualEditor()">
+                            <i class="bi bi-grid me-1"></i>Визуальный редактор
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Статистика -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-bar-chart me-2"></i>Статистика
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div id="statsContent" class="text-center">
+                        <p class="text-muted">Загрузите плейбук для просмотра статистики</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script>
+let originalContent = document.getElementById('yamlEditor').value;
+
+// Проверка YAML
+function validateYaml() {
+    const content = document.getElementById('yamlEditor').value;
+    
+    try {
+        const data = jsyaml.load(content);
+        showAlert('YAML синтаксис корректен', 'success');
+        
+        // Показываем статистику
+        let stats = '';
+        if (Array.isArray(data)) {
+            stats = `<h3 class="text-primary">${data.length}</h3>
+                    <small class="text-muted">плейбуков</small>`;
+            
+            if (data[0] && data[0].tasks) {
+                stats += `<hr><h3 class="text-success">${data[0].tasks.length}</h3>
+                         <small class="text-muted">задач</small>`;
+            }
+        }
+        document.getElementById('statsContent').innerHTML = stats;
+        
+    } catch (e) {
+        showAlert('Ошибка YAML: ' + e.message, 'error');
+    }
+}
+
+// Форматирование YAML
+function formatYaml() {
+    const content = document.getElementById('yamlEditor').value;
+    
+    try {
+        const data = jsyaml.load(content);
+        const formatted = jsyaml.dump(data, {
+            indent: 2,
+            lineWidth: -1,
+            noRefs: true
+        });
+        document.getElementById('yamlEditor').value = formatted;
+        showAlert('YAML отформатирован', 'success');
+    } catch (e) {
+        showAlert('Ошибка форматирования: ' + e.message, 'error');
+    }
+}
+
+// Открыть визуальный редактор
+function openVisualEditor() {
+    if (confirm('Перейти в визуальный редактор? Несохраненные изменения будут потеряны.')) {
+        window.location.href = '/playbooks/create?edit={{ playbook_name }}';
+    }
+}
+
+// Сохранение плейбука
+function savePlaybook() {
+    const content = document.getElementById('yamlEditor').value;
+    
+    fetch('/playbooks/api/save', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            name: '{{ playbook_name }}',
+            content: content
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Плейбук сохранен', 'success');
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showAlert('Ошибка: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        showAlert('Ошибка сети: ' + error.message, 'error');
+    });
+}
+
+// Уведомления
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    alertDiv.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="bi ${type === 'success' ? 'bi-check-circle' : 
+                         type === 'error' ? 'bi-x-circle' : 
+                         'bi-info-circle'} me-2"></i>
+            <div>${message}</div>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+    document.body.appendChild(alertDiv);
+    setTimeout(() => alertDiv.remove(), 5000);
+}
+</script>
+{% endblock %}

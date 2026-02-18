@@ -11,7 +11,7 @@ app.config['TABS_CONFIG'] = {
     'dashboard': {'name': 'Dashboard', 'icon': 'speedometer2', 'url': 'dashboard.index'},
     'inventory': {'name': 'Инвентари', 'icon': 'list-check', 'url': 'inventory.inventory_list'},
     'hosts': {'name': 'Хосты', 'icon': 'pc-display', 'url': 'hosts.host_list'},
-    'playbooks': {'name': 'Плейбуки', 'icon': 'play-circle', 'url': 'playbooks.list'},
+    'playbooks': {'name': 'Плейбуки', 'icon': 'play-circle', 'url': 'playbooks.pb_list'},
     'tasks': {'name': 'Задачи', 'icon': 'clock-history', 'url': 'tasks.list'},
     'reports': {'name': 'Отчёты', 'icon': 'graph-up', 'url': 'reports.index'},
     'settings': {'name': 'Настройки', 'icon': 'gear', 'url': 'settings.index'}

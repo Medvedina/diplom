@@ -20,7 +20,7 @@
             <p class="text-muted mb-0">Визуальный конструктор инвентаря сетевого оборудования</p>
         </div>
         <div class="btn-group">
-            <button type="button" class="btn btn-outline-secondary" onclick="goBackToList()">
+            <button type="button" class="btn btn-outline-secondary" onclick="goBackToInventoryList()">
                 <i class="bi bi-arrow-left me-1"></i>Назад к списку
             </button>
         </div>
@@ -185,13 +185,7 @@
                     </h6>
                 </div>
                 <div class="card-body">
-                    <div class="alert alert-light border">
-                        <small class="text-muted">Генерируемый YAML будет отображаться здесь</small>
-                    </div>
-                    <pre id="yamlPreview" style="font-size: 0.75rem; max-height: 300px; overflow-y: auto;" class="bg-light p-2 rounded border"></pre>
-                    <button type="button" class="btn btn-sm btn-outline-info w-100 mt-2" onclick="generateYaml()">
-                        <i class="bi bi-arrow-clockwise me-1"></i>Обновить предпросмотр
-                    </button>
+                    <pre id="yamlPreview" style="font-size: 0.75rem; max-height: 500px; overflow-y: auto;" class="bg-light p-2 rounded border"></pre>
                 </div>
             </div>
             
@@ -229,7 +223,7 @@
                         <button type="button" class="btn btn-outline-secondary" onclick="saveAsTemplate()">
                             <i class="bi bi-file-earmark-plus me-1"></i>Сохранить как шаблон
                         </button>
-                        <button type="button" class="btn btn-outline-warning" onclick="validateYaml()">
+                        <button type="button" class="btn btn-outline-warning" onclick="validateInventoryYaml()">
                             <i class="bi bi-check-circle me-1"></i>Проверить синтаксис
                         </button>
                     </div>
@@ -242,6 +236,9 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
 
 <!-- Модальное окно импорта CSV -->
 <div class="modal fade" id="importModal" tabindex="-1">
@@ -279,70 +276,26 @@ host2,10.0.1.2,switches,switch,СПб"></textarea>
     </div>
 </div>
 
-<script>
-    
-    // Статус групп
-    const groupsStatus = document.getElementById('groupsStatus');
-    if (groupsStatus) {
-        const groupCount = Object.keys(groups).length;
-        groupsStatus.textContent = `${groupCount} групп`;
-        groupsStatus.className = groupCount > 0 ? 'alert alert-success py-2' : 'alert alert-warning py-2';
-    }
-    
-    // Статус хостов
-    const hostsStatus = document.getElementById('hostsStatus');
-    if (hostsStatus) {
-        let totalHosts = 0;
-        Object.values(groups).forEach(group => {
-            totalHosts += group.hosts.length;
-        });
-        hostsStatus.textContent = `${totalHosts} хостов`;
-        hostsStatus.className = totalHosts > 0 ? 'alert alert-success py-2' : 'alert alert-warning py-2';
-    }
+<!-- Подключаем библиотеку js-yaml для работы с YAML в браузере -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 
-
-// Обновляем статус при изменениях
-document.addEventListener('DOMContentLoaded', function() {
-    // Обновляем статус каждые 2 секунды
-    setInterval(updateDebugInfo, 2000);
-    
-    // Обновляем при генерации YAML
-    const originalGenerateYaml = generateYaml;
-    generateYaml = function() {
-        const result = originalGenerateYaml.apply(this, arguments);
-        setTimeout(updateDebugInfo, 100);
-        return result;
-    };
-    
-    // Обновляем при добавлении/удалении групп
-    const originalAddNewGroup = addNewGroup;
-    addNewGroup = function() {
-        const result = originalAddNewGroup.apply(this, arguments);
-        setTimeout(updateDebugInfo, 100);
-        return result;
-    };
-    
-    // Инициализируем
-    setTimeout(updateDebugInfo, 1000);
-});
-</script>
-<!-- JavaScript для визуального конструктора -->
 <script>
 // Глобальные переменные
 let groups = {};
+let updateTimeout = null;
 
 // Инициализация
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded, initializing inventory creator');
-    
-    // Сначала очищаем localStorage от старых ошибок
-    localStorage.removeItem('restore_draft');
     
     // Добавляем первую группу по умолчанию
     setTimeout(() => {
         addNewGroup();
         console.log('Default group added');
     }, 100);
+    
+    // Настраиваем автоматическое обновление для всех полей формы
+    setupAutoUpdate();
     
     // Автосохранение черновика каждые 30 секунд
     setInterval(() => {
@@ -355,22 +308,42 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }, 30000);
     
-    // Автоматическое обновление предпросмотра при изменении формы
-    ['inventoryName', 'inventoryDescription', 'ansibleUser'].forEach(id => {
-        document.getElementById(id).addEventListener('input', () => {
-            setTimeout(generateYaml, 100);
-        });
-    });
-    
-    ['networkOS', 'connectionType'].forEach(id => {
-        document.getElementById(id).addEventListener('change', () => {
-            setTimeout(generateYaml, 100);
-        });
-    });
+    // Пытаемся восстановить черновик
+    setTimeout(restoreDraft, 500);
 });
 
+// Настройка автоматического обновления
+function setupAutoUpdate() {
+    // Поля формы
+    ['inventoryName', 'inventoryDescription', 'ansibleUser'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('input', triggerYamlUpdate);
+        }
+    });
+    
+    // Выпадающие списки
+    ['networkOS', 'connectionType'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.addEventListener('change', triggerYamlUpdate);
+        }
+    });
+}
+
+// Запуск обновления YAML с debounce
+function triggerYamlUpdate() {
+    if (updateTimeout) {
+        clearTimeout(updateTimeout);
+    }
+    updateTimeout = setTimeout(() => {
+        generateYaml();
+        updateTimeout = null;
+    }, 300);
+}
+
 // Навигация назад
-function goBackToList() {
+function goBackToInventoryList() {
     if (confirm('Все несохраненные изменения будут потеряны. Продолжить?')) {
         window.location.href = "{{ url_for('inventory.inventory_list') }}";
     }
@@ -395,7 +368,10 @@ function addNewGroup() {
     // Устанавливаем имя группы
     const nameInput = clone.querySelector('.group-name');
     nameInput.value = groupName;
-    nameInput.addEventListener('change', updateGroupName);
+    nameInput.addEventListener('change', function(e) {
+        updateGroupName(e);
+        triggerYamlUpdate();
+    });
     
     // Сохраняем группу
     groups[groupName] = {
@@ -407,14 +383,9 @@ function addNewGroup() {
     // Добавляем в контейнер
     document.getElementById('groupsContainer').appendChild(clone);
     
-    // Обновляем статистику
+    // Обновляем статистику и предпросмотр
     updateStats();
-    
-    // Добавляем первый хост в группу
-    setTimeout(() => {
-        const addBtn = groupCard.querySelector('.card-header button.btn-outline-success');
-        addHostToGroup(addBtn);
-    }, 100);
+    triggerYamlUpdate();
 }
 
 // Обновление имени группы
@@ -424,13 +395,13 @@ function updateGroupName(event) {
     const newName = input.value.trim();
     
     if (!newName) {
-        showAlert('Имя группы не может быть пустым', 'warning');
+        showInventoryAlert('Имя группы не может быть пустым', 'warning');
         input.value = oldName;
         return;
     }
     
     if (groups[newName] && newName !== oldName) {
-        showAlert('Группа с таким именем уже существует', 'error');
+        showInventoryAlert('Группа с таким именем уже существует', 'error');
         input.value = oldName;
         return;
     }
@@ -444,6 +415,8 @@ function updateGroupName(event) {
         // Обновляем атрибуты
         input.dataset.oldName = newName;
     }
+    
+    triggerYamlUpdate();
 }
 
 // Добавление хоста в группу
@@ -470,7 +443,6 @@ function addHostToGroup(button) {
     let hostName = `${baseName}-${String(hostCount + 1).padStart(2, '0')}`;
     let counter = 1;
     
-    // Ищем уникальное имя
     while (existingNames.has(hostName)) {
         hostName = `${baseName}-${String(hostCount + 1 + counter).padStart(2, '0')}`;
         counter++;
@@ -504,22 +476,29 @@ function addHostToGroup(button) {
     
     // Добавляем обработчики событий для полей хоста
     const hostItem = hostsContainer.lastElementChild;
-    hostItem.querySelector('.host-name').addEventListener('input', updateHostData);
-    hostItem.querySelector('.host-ip').addEventListener('input', updateHostData);
-    hostItem.querySelector('.device-type').addEventListener('change', updateHostData);
-    hostItem.querySelector('.location').addEventListener('input', updateHostData);
+    hostItem.querySelector('.host-name').addEventListener('input', function(e) {
+        updateHostData(e);
+        triggerYamlUpdate();
+    });
+    hostItem.querySelector('.host-ip').addEventListener('input', function(e) {
+        updateHostData(e);
+        triggerYamlUpdate();
+    });
+    hostItem.querySelector('.device-type').addEventListener('change', function(e) {
+        updateHostData(e);
+        triggerYamlUpdate();
+    });
+    hostItem.querySelector('.location').addEventListener('input', function(e) {
+        updateHostData(e);
+        triggerYamlUpdate();
+    });
     
     // Обновляем статистику и предпросмотр
     updateStats();
     updateGroupHostCount(groupCard);
-    
-    // Генерируем YAML после небольшой задержки
-    setTimeout(() => {
-        generateYaml();
-    }, 50);
+    triggerYamlUpdate();
 }
 
-// Обновление данных хоста
 // Обновление данных хоста
 function updateHostData(event) {
     const hostItem = event.target.closest('.host-item');
@@ -545,9 +524,8 @@ function updateHostData(event) {
         }
     }
     
-    // Обновляем предпросмотр
-    generateYaml();
     updateGroupHostCount(groupCard);
+    triggerYamlUpdate();
 }
 
 // Удаление группы
@@ -559,6 +537,8 @@ function removeGroup(button) {
         delete groups[groupName];
         groupCard.remove();
         updateStats();
+        triggerYamlUpdate();
+        showInventoryAlert(`Группа "${groupName}" удалена`, 'info');
     }
 }
 
@@ -567,8 +547,9 @@ function removeHost(button) {
     const hostItem = button.closest('.host-item');
     const groupCard = hostItem.closest('.group-card');
     const groupName = groupCard.querySelector('.group-name').value;
+    const hostName = hostItem.querySelector('.host-name').value || 'хост';
     
-    if (confirm('Удалить этот хост?')) {
+    if (confirm(`Удалить хост "${hostName}"?`)) {
         // Удаляем из массива группы
         const group = groups[groupName];
         if (group) {
@@ -581,6 +562,8 @@ function removeHost(button) {
         hostItem.remove();
         updateStats();
         updateGroupHostCount(groupCard);
+        triggerYamlUpdate();
+        showInventoryAlert(`Хост "${hostName}" удален`, 'info');
     }
 }
 
@@ -606,11 +589,9 @@ function updateStats() {
     document.getElementById('hostsCount').textContent = totalHosts;
 }
 
-// Генерация YAML из данных форм
-// Генерация YAML из данных форм - УЛУЧШЕННАЯ ВЕРСИЯ
-// Генерация YAML - УПРОЩЕННАЯ ВЕРСИЯ
+// Генерация YAML из данных форм - АВТОМАТИЧЕСКАЯ
 function generateYaml() {
-    console.log('Генерация YAML...');
+    console.log('Автоматическая генерация YAML...');
     
     try {
         // Получаем данные формы
@@ -675,14 +656,10 @@ function generateYaml() {
             'sortKeys': false
         });
         
-        console.log('Сгенерированный YAML:', yamlString);
-        
         // Обновляем предпросмотр
         const previewElement = document.getElementById('yamlPreview');
         if (previewElement) {
             previewElement.textContent = yamlString;
-        } else {
-            console.error('Элемент yamlPreview не найден!');
         }
         
         return yamlString;
@@ -700,66 +677,28 @@ function generateYaml() {
     }
 }
 
-// Принудительная генерация YAML
-function forceGenerateYaml() {
-    console.log('=== ПРИНУДИТЕЛЬНАЯ ГЕНЕРАЦИЯ YAML ===');
-    
-    // Генерируем YAML
-    const yaml = generateYaml();
-    
-    // Проверяем результат
-    const preview = document.getElementById('yamlPreview');
-    if (preview) {
-        const content = preview.textContent.trim();
-        console.log('Результат генерации:', {
-            длина: content.length,
-            содержит_all: content.includes('all:'),
-            содержит_children: content.includes('children:'),
-            первые_200_символов: content.substring(0, 200)
-        });
-        
-        if (content && content.length > 0) {
-            showAlert('YAML сгенерирован успешно!', 'success');
-        } else {
-            showAlert('Не удалось сгенерировать YAML', 'error');
-        }
-    } else {
-        console.error('Элемент предпросмотра не найден после генерации!');
-        showAlert('Ошибка: элемент предпросмотра не найден', 'error');
-    }
-    
-    return yaml;
-}
-
-// Создание инвентаря - ИСПРАВЛЕННАЯ ВЕРСИЯ
+// Создание инвентаря
 function createInventory() {
-    alert('=== СОЗДАНИЕ ИНВЕНТАРЯ ===');
+    console.log('=== СОЗДАНИЕ ИНВЕНТАРЯ ===');
     
     // Получаем данные формы
     const name = document.getElementById('inventoryName').value.trim();
     const description = document.getElementById('inventoryDescription').value.trim();
     const yamlContent = document.getElementById('yamlPreview').textContent.trim();
     
-    console.log('Данные формы:', {
-        name: name,
-        description: description,
-        yamlLength: yamlContent.length,
-        yamlPreview: yamlContent.substring(0, 200) + (yamlContent.length > 200 ? '...' : '')
-    });
-    
     // Валидация
     if (!name) {
-        showAlert('Введите название инвентаря', 'warning');
+        showInventoryAlert('Введите название инвентаря', 'warning');
         return;
     }
     
     if (!/^[a-zA-Z0-9_\-]+$/.test(name)) {
-        showAlert('Название может содержать только буквы, цифры, подчеркивание и дефис', 'error');
+        showInventoryAlert('Название может содержать только буквы, цифры, подчеркивание и дефис', 'error');
         return;
     }
     
-    if (!yamlContent) {
-        showAlert('YAML контент пуст. Обновите предпросмотр.', 'error');
+    if (!yamlContent || yamlContent.startsWith('# Ошибка')) {
+        showInventoryAlert('YAML контент содержит ошибки', 'error');
         return;
     }
     
@@ -770,7 +709,7 @@ function createInventory() {
     });
     
     if (totalHosts === 0) {
-        showAlert('Добавьте хотя бы одно устройство в инвентарь', 'warning');
+        showInventoryAlert('Добавьте хотя бы одно устройство в инвентарь', 'warning');
         return;
     }
     
@@ -781,8 +720,7 @@ function createInventory() {
         content: yamlContent
     };
     
-    alert('Данные для отправки:', requestData);
-    console.log('Длина YAML:', requestData.content.length);
+    console.log('Данные для отправки:', requestData);
     
     // Показываем индикатор загрузки
     const submitBtn = document.querySelector('button[onclick="createInventory()"]');
@@ -801,145 +739,239 @@ function createInventory() {
     })
     .then(response => {
         console.log('Ответ сервера - статус:', response.status);
-        console.log('Ответ сервера - заголовки:', response.headers);
-        
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
         return response.json();
     })
     .then(data => {
         console.log('Данные ответа:', data);
         
         if (data.success) {
-            showAlert('Инвентарь успешно создан!', 'success');
+            showInventoryAlert('Инвентарь успешно создан!', 'success');
             
             // Очищаем localStorage
             localStorage.removeItem('inventory_draft');
-            localStorage.removeItem('restore_draft');
             
             // Ждем и перенаправляем
             setTimeout(() => {
                 window.location.href = "{{ url_for('inventory.inventory_list') }}";
             }, 1500);
         } else {
-            showAlert('Ошибка: ' + data.message, 'error');
+            showInventoryAlert('Ошибка: ' + data.message, 'error');
             submitBtn.innerHTML = originalText;
             submitBtn.disabled = false;
         }
     })
     .catch(error => {
         console.error('Ошибка:', error);
-        showAlert('Ошибка: ' + error.message, 'error');
+        showInventoryAlert('Ошибка: ' + error.message, 'error');
         submitBtn.innerHTML = originalText;
         submitBtn.disabled = false;
     });
 }
 
-// Загрузка шаблона
-function loadTemplate(templateType) {
-    // Сбрасываем текущие данные
-    groups = {};
-    document.getElementById('groupsContainer').innerHTML = '';
+// Сохранение как шаблон
+function saveAsTemplate() {
+    const templateData = {
+        name: document.getElementById('inventoryName').value.trim() || 'unnamed_template',
+        description: document.getElementById('inventoryDescription').value.trim(),
+        groups: groups,
+        formData: {
+            ansibleUser: document.getElementById('ansibleUser').value,
+            networkOS: document.getElementById('networkOS').value,
+            connectionType: document.getElementById('connectionType').value
+        },
+        timestamp: new Date().toISOString()
+    };
     
-    switch(templateType) {
-        case 'network':
-            // Заполняем поля формы
-            document.getElementById('inventoryName').value = 'network_inventory_' + new Date().getTime();
-            document.getElementById('inventoryDescription').value = 'Инвентарь сетевого оборудования';
-            document.getElementById('ansibleUser').value = 'admin';
-            document.getElementById('networkOS').value = 'ios';
-            document.getElementById('connectionType').value = 'network_cli';
-            
-            // Создаем группы для сетевого оборудования
-            setTimeout(() => {
-                // Первая группа - маршрутизаторы
-                addNewGroup();
-                const groupNameInput = document.querySelector('.group-name');
-                if (groupNameInput) {
-                    groupNameInput.value = 'core_routers';
-                    updateGroupName({target: groupNameInput});
-                    
-                    // Вторая группа - коммутаторы
-                    setTimeout(() => {
-                        addNewGroup();
-                        const swGroup = document.querySelectorAll('.group-name')[1];
-                        swGroup.value = 'distribution_switches';
-                        updateGroupName({target: swGroup});
-                        
-                        // Автозаполнение хостов
-                        setTimeout(() => {
-                            autoFillTemplateHosts();
-                        }, 200);
-                    }, 100);
-                }
-            }, 100);
-            
-            showAlert('Шаблон сетевого оборудования загружен', 'info');
-            break;
-            
-        case 'empty':
-            // Просто добавляем одну пустую группу
-            addNewGroup();
-            document.getElementById('inventoryName').value = 'empty_inventory_' + new Date().getTime();
-            document.getElementById('inventoryDescription').value = 'Пустой инвентарь';
-            showAlert('Пустой шаблон загружен', 'info');
-            break;
-            
-        default:
-            addNewGroup();
-    }
+    // Сохраняем в localStorage
+    const templates = JSON.parse(localStorage.getItem('inventory_templates') || '{}');
+    templates[templateData.name] = templateData;
+    localStorage.setItem('inventory_templates', JSON.stringify(templates));
     
-    // Генерируем предпросмотр
-    setTimeout(() => {
-        generateYaml();
-    }, 300);
+    showInventoryAlert(`Шаблон "${templateData.name}" сохранен`, 'success');
 }
 
-// Автозаполнение хостов для шаблона
-// Автозаполнение хостов для шаблона
-function autoFillTemplateHosts() {
-    Object.values(groups).forEach((group, groupIndex) => {
-        const groupCard = document.querySelectorAll('.group-card')[groupIndex];
-        const hostsContainer = groupCard.querySelector('.hosts-container');
-        
-        // Очищаем существующие хосты
-        hostsContainer.innerHTML = '';
-        group.hosts = [];
-        
-        // Добавляем 2 хоста в каждую группу
-        for (let i = 1; i <= 2; i++) {
-            addHostToGroup(groupCard.querySelector('.btn-outline-success'));
-            
-            setTimeout(() => {
-                const hostItem = hostsContainer.querySelectorAll('.host-item')[i-1];
-                if (hostItem) {
-                    const hostName = `${group.name.replace('_', '-')}-0${i}`;
-                    const ipBase = `10.${groupIndex + 1}.${i}`;
-                    
-                    hostItem.querySelector('.host-name').value = hostName;
-                    hostItem.querySelector('.host-ip').value = `${ipBase}.1`;
-                    
-                    if (group.name.includes('router')) {
-                        hostItem.querySelector('.device-type').value = 'router';
-                        hostItem.querySelector('.location').value = 'Москва, ЦОД-1';
-                    } else if (group.name.includes('switch')) {
-                        hostItem.querySelector('.device-type').value = 'switch';
-                        hostItem.querySelector('.location').value = 'СПб, офис';
-                    }
-                    
-                    // Обновляем данные (важно вызвать эту функцию!)
-                    updateHostData({target: hostItem.querySelector('.host-name')});
-                }
-            }, 100);
+// Валидация YAML
+function validateInventoryYaml() {
+    const yamlContent = document.getElementById('yamlPreview').textContent;
+    
+    fetch('/inventory/api/validate', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({content: yamlContent})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.valid) {
+            showInventoryAlert('YAML синтаксис корректен', 'success');
+        } else {
+            showInventoryAlert('Ошибка YAML: ' + data.error, 'error');
         }
     });
-    
-    // Обновляем предпросмотр после заполнения всех хостов
-    setTimeout(() => {
-        generateYaml();
-    }, 500);
+}
+
+// Автосохранение черновика
+function autoSaveDraft() {
+    try {
+        // Проверяем, есть ли хосты с данными
+        let hasValidData = false;
+        Object.values(groups).forEach(group => {
+            if (group.hosts && group.hosts.length > 0) {
+                const validHosts = group.hosts.filter(host => 
+                    host && host.name && host.name.trim() && host.ip && host.ip.trim()
+                );
+                if (validHosts.length > 0) {
+                    hasValidData = true;
+                }
+            }
+        });
+        
+        if (!hasValidData && 
+            !document.getElementById('inventoryName').value && 
+            !document.getElementById('inventoryDescription').value) {
+            return; // Не сохраняем пустой черновик
+        }
+        
+        const draft = {
+            inventoryName: document.getElementById('inventoryName').value,
+            description: document.getElementById('inventoryDescription').value,
+            groups: groups,
+            formData: {
+                ansibleUser: document.getElementById('ansibleUser').value,
+                networkOS: document.getElementById('networkOS').value,
+                connectionType: document.getElementById('connectionType').value
+            },
+            timestamp: new Date().toISOString()
+        };
+        
+        localStorage.setItem('inventory_draft', JSON.stringify(draft));
+        console.log('Черновик автосохранен');
+    } catch (e) {
+        console.error('Ошибка автосохранения:', e);
+    }
+}
+
+// Восстановление черновика
+function restoreDraft() {
+    try {
+        const draftData = localStorage.getItem('inventory_draft');
+        if (!draftData) {
+            console.log('No draft found in localStorage');
+            return;
+        }
+        
+        const draft = JSON.parse(draftData);
+        console.log('Restoring draft:', draft);
+        
+        if (!draft || !draft.groups) {
+            console.log('Invalid draft format');
+            return;
+        }
+        
+        // Очищаем текущие данные
+        groups = {};
+        const container = document.getElementById('groupsContainer');
+        if (container) {
+            container.innerHTML = '';
+        }
+        
+        // Восстанавливаем данные формы
+        document.getElementById('inventoryName').value = draft.inventoryName || '';
+        document.getElementById('inventoryDescription').value = draft.description || '';
+        document.getElementById('ansibleUser').value = draft.formData?.ansibleUser || 'admin';
+        document.getElementById('networkOS').value = draft.formData?.networkOS || 'ios';
+        document.getElementById('connectionType').value = draft.formData?.connectionType || 'network_cli';
+        
+        // Восстанавливаем группы
+        const groupNames = Object.keys(draft.groups);
+        console.log(`Restoring ${groupNames.length} groups`);
+        
+        groupNames.forEach((groupName, groupIndex) => {
+            const groupData = draft.groups[groupName];
+            
+            // Создаем новую группу
+            addNewGroup();
+            
+            // Ждем создания DOM элемента
+            setTimeout(() => {
+                const groupCards = document.querySelectorAll('.group-card');
+                const currentGroupCard = groupCards[groupIndex];
+                
+                if (currentGroupCard) {
+                    // Устанавливаем имя группы
+                    const nameInput = currentGroupCard.querySelector('.group-name');
+                    if (nameInput) {
+                        nameInput.value = groupName;
+                        nameInput.dispatchEvent(new Event('change'));
+                    }
+                    
+                    // Очищаем хосты в новой группе
+                    const hostsContainer = currentGroupCard.querySelector('.hosts-container');
+                    if (hostsContainer) {
+                        hostsContainer.innerHTML = '';
+                    }
+                    
+                    // Обновляем данные группы
+                    groups[groupName] = {
+                        name: groupName,
+                        hosts: [],
+                        vars: groupData.vars || {}
+                    };
+                    
+                    // Добавляем хосты из черновика
+                    if (groupData.hosts && Array.isArray(groupData.hosts)) {
+                        const uniqueHosts = [];
+                        const seenHosts = new Set();
+                        
+                        groupData.hosts.forEach(host => {
+                            if (host && host.name && !seenHosts.has(host.name)) {
+                                seenHosts.add(host.name);
+                                uniqueHosts.push(host);
+                            }
+                        });
+                        
+                        console.log(`Group ${groupName}: ${uniqueHosts.length} unique hosts`);
+                        
+                        // Добавляем уникальные хосты
+                        uniqueHosts.forEach((host, hostIndex) => {
+                            setTimeout(() => {
+                                addHostToGroup(currentGroupCard.querySelector('.btn-outline-success'));
+                                
+                                setTimeout(() => {
+                                    const hostItems = currentGroupCard.querySelectorAll('.host-item');
+                                    const lastHost = hostItems[hostItems.length - 1];
+                                    
+                                    if (lastHost && host) {
+                                        lastHost.querySelector('.host-name').value = host.name || '';
+                                        lastHost.querySelector('.host-ip').value = host.ip || '';
+                                        lastHost.querySelector('.device-type').value = host.type || 'router';
+                                        lastHost.querySelector('.location').value = host.location || '';
+                                        
+                                        // Обновляем данные
+                                        updateHostData({target: lastHost.querySelector('.host-name')});
+                                    }
+                                }, 50);
+                            }, hostIndex * 100);
+                        });
+                    }
+                }
+            }, groupIndex * 200);
+        });
+        
+        // После восстановления всех групп обновляем предпросмотр
+        setTimeout(() => {
+            console.log('Finalizing draft restoration...');
+            updateStats();
+            generateYaml();
+            showInventoryAlert('Черновик восстановлен', 'info');
+        }, groupNames.length * 300 + 500);
+        
+    } catch (error) {
+        console.error('Error restoring draft:', error);
+        showInventoryAlert('Ошибка восстановления черновика', 'error');
+    }
 }
 
 // Импорт из CSV
@@ -985,7 +1017,7 @@ function processCSV() {
     } else if (csvText) {
         processCSVContent(csvText);
     } else {
-        showAlert('Загрузите файл или введите CSV данные', 'warning');
+        showInventoryAlert('Загрузите файл или введите CSV данные', 'warning');
         return;
     }
 }
@@ -1055,271 +1087,12 @@ function processCSVContent(content) {
         
         generateYaml();
         bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
-        showAlert(`Импортировано ${lines.length - 1} устройств`, 'success');
+        showInventoryAlert(`Импортировано ${lines.length - 1} устройств`, 'success');
     }, 200);
 }
 
-// Сохранение как шаблон
-function saveAsTemplate() {
-    const templateData = {
-        name: document.getElementById('inventoryName').value.trim() || 'unnamed_template',
-        description: document.getElementById('inventoryDescription').value.trim(),
-        groups: groups,
-        formData: {
-            ansibleUser: document.getElementById('ansibleUser').value,
-            networkOS: document.getElementById('networkOS').value,
-            connectionType: document.getElementById('connectionType').value
-        },
-        timestamp: new Date().toISOString()
-    };
-    
-    // Сохраняем в localStorage
-    const templates = JSON.parse(localStorage.getItem('inventory_templates') || '{}');
-    templates[templateData.name] = templateData;
-    localStorage.setItem('inventory_templates', JSON.stringify(templates));
-    
-    showAlert(`Шаблон "${templateData.name}" сохранен`, 'success');
-}
-
-// Проверка YAML синтаксиса
-function validateYaml() {
-    const yamlContent = generateYaml();
-    
-    fetch("{{ url_for('inventory.api_validate_yaml') }}", {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({content: yamlContent})
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.valid) {
-            showAlert('YAML синтаксис корректен', 'success');
-        } else {
-            showAlert('Ошибка YAML: ' + data.error, 'error');
-        }
-    });
-}
-
-// Автосохранение черновика
-function autoSaveDraft() {
-    try {
-        // Проверяем, есть ли хосты с данными
-        let hasValidData = false;
-        Object.values(groups).forEach(group => {
-            if (group.hosts && group.hosts.length > 0) {
-                const validHosts = group.hosts.filter(host => 
-                    host && host.name && host.name.trim() && host.ip && host.ip.trim()
-                );
-                if (validHosts.length > 0) {
-                    hasValidData = true;
-                }
-            }
-        });
-        
-        if (!hasValidData && 
-            !document.getElementById('inventoryName').value && 
-            !document.getElementById('inventoryDescription').value) {
-            return; // Не сохраняем пустой черновик
-        }
-        
-        const draft = {
-            inventoryName: document.getElementById('inventoryName').value,
-            description: document.getElementById('inventoryDescription').value,
-            groups: groups,
-            formData: {
-                ansibleUser: document.getElementById('ansibleUser').value,
-                networkOS: document.getElementById('networkOS').value,
-                connectionType: document.getElementById('connectionType').value
-            },
-            timestamp: new Date().toISOString()
-        };
-        
-        localStorage.setItem('inventory_draft', JSON.stringify(draft));
-        console.log('Черновик автосохранен');
-    } catch (e) {
-        console.error('Ошибка автосохранения:', e);
-    }
-}
-
-
-// Восстановление черновика при загрузке
-function restoreDraft() {
-    try {
-        const draftData = localStorage.getItem('inventory_draft');
-        if (!draftData) {
-            console.log('No draft found in localStorage');
-            return;
-        }
-        
-        const draft = JSON.parse(draftData);
-        console.log('Restoring draft:', draft);
-        
-        if (!draft || !draft.groups) {
-            console.log('Invalid draft format');
-            return;
-        }
-        
-        // Очищаем текущие данные
-        groups = {};
-        const container = document.getElementById('groupsContainer');
-        if (container) {
-            container.innerHTML = '';
-        }
-        
-        // Восстанавливаем данные формы
-        document.getElementById('inventoryName').value = draft.inventoryName || '';
-        document.getElementById('inventoryDescription').value = draft.description || '';
-        document.getElementById('ansibleUser').value = draft.formData?.ansibleUser || 'admin';
-        document.getElementById('networkOS').value = draft.formData?.networkOS || 'ios';
-        document.getElementById('connectionType').value = draft.formData?.connectionType || 'network_cli';
-        
-        // Восстанавливаем группы
-        const groupNames = Object.keys(draft.groups);
-        console.log(`Restoring ${groupNames.length} groups`);
-        
-        groupNames.forEach((groupName, groupIndex) => {
-            const groupData = draft.groups[groupName];
-            
-            // Создаем новую группу
-            addNewGroup();
-            
-            // Ждем создания DOM элемента
-            setTimeout(() => {
-                const groupCards = document.querySelectorAll('.group-card');
-                const currentGroupCard = groupCards[groupIndex];
-                
-                if (currentGroupCard) {
-                    // Устанавливаем имя группы
-                    const nameInput = currentGroupCard.querySelector('.group-name');
-                    if (nameInput) {
-                        nameInput.value = groupName;
-                        nameInput.dispatchEvent(new Event('change'));
-                    }
-                    
-                    // Очищаем хосты в новой группе (там уже есть один хост по умолчанию)
-                    const hostsContainer = currentGroupCard.querySelector('.hosts-container');
-                    if (hostsContainer) {
-                        hostsContainer.innerHTML = '';
-                    }
-                    
-                    // Обновляем данные группы
-                    groups[groupName] = {
-                        name: groupName,
-                        hosts: [],
-                        vars: groupData.vars || {}
-                    };
-                    
-                    // Добавляем хосты из черновика (без дублирования)
-                    if (groupData.hosts && Array.isArray(groupData.hosts)) {
-                        // Убираем дубликаты по имени хоста
-                        const uniqueHosts = [];
-                        const seenHosts = new Set();
-                        
-                        groupData.hosts.forEach(host => {
-                            if (host && host.name && !seenHosts.has(host.name)) {
-                                seenHosts.add(host.name);
-                                uniqueHosts.push(host);
-                            }
-                        });
-                        
-                        console.log(`Group ${groupName}: ${uniqueHosts.length} unique hosts`);
-                        
-                        // Добавляем уникальные хосты
-                        uniqueHosts.forEach((host, hostIndex) => {
-                            setTimeout(() => {
-                                addHostToGroup(currentGroupCard.querySelector('.btn-outline-success'));
-                                
-                                setTimeout(() => {
-                                    const hostItems = currentGroupCard.querySelectorAll('.host-item');
-                                    const lastHost = hostItems[hostItems.length - 1];
-                                    
-                                    if (lastHost && host) {
-                                        lastHost.querySelector('.host-name').value = host.name || '';
-                                        lastHost.querySelector('.host-ip').value = host.ip || '';
-                                        lastHost.querySelector('.device-type').value = host.type || 'router';
-                                        lastHost.querySelector('.location').value = host.location || '';
-                                        
-                                        // Обновляем данные
-                                        updateHostData({target: lastHost.querySelector('.host-name')});
-                                    }
-                                }, 50);
-                            }, hostIndex * 100);
-                        });
-                    }
-                }
-            }, groupIndex * 200);
-        });
-        
-        // После восстановления всех групп обновляем предпросмотр
-        setTimeout(() => {
-            console.log('Finalizing draft restoration...');
-            updateStats();
-            generateYaml();
-            showAlert('Черновик восстановлен', 'info');
-        }, groupNames.length * 300 + 500);
-        
-    } catch (error) {
-        console.error('Error restoring draft:', error);
-        showAlert('Ошибка восстановления черновика', 'error');
-    }
-}
-
-function rebuildUIFromDraft() {
-    // Очищаем контейнер
-    const container = document.getElementById('groupsContainer');
-    if (!container) return;
-    
-    container.innerHTML = '';
-    
-    // Перестраиваем группы
-    Object.values(groups).forEach(group => {
-        // Создаем группу
-        const template = document.getElementById('groupTemplate');
-        const clone = template.content.cloneNode(true);
-        const groupCard = clone.querySelector('.group-card');
-        
-        // Устанавливаем имя группы
-        const nameInput = clone.querySelector('.group-name');
-        nameInput.value = group.name;
-        nameInput.addEventListener('change', updateGroupName);
-        
-        // Добавляем в DOM
-        container.appendChild(clone);
-        
-        // Добавляем хосты
-        if (group.hosts && group.hosts.length > 0) {
-            group.hosts.forEach(host => {
-                addHostToGroup(groupCard.querySelector('.btn-outline-success'));
-                
-                setTimeout(() => {
-                    const hostItems = groupCard.querySelectorAll('.host-item');
-                    const lastHost = hostItems[hostItems.length - 1];
-                    
-                    if (lastHost && host) {
-                        lastHost.querySelector('.host-name').value = host.name || '';
-                        lastHost.querySelector('.host-ip').value = host.ip || '';
-                        lastHost.querySelector('.device-type').value = host.type || 'router';
-                        lastHost.querySelector('.location').value = host.location || '';
-                        
-                        // Обновляем данные
-                        updateHostData({target: lastHost.querySelector('.host-name')});
-                    }
-                }, 50);
-            });
-        }
-    });
-    
-    // Если нет групп, добавляем одну пустую
-    if (Object.keys(groups).length === 0) {
-        addNewGroup();
-    }
-    
-    updateStats();
-    generateYaml();
-}
-
-// Показ уведомлений
-function showAlert(message, type) {
+// Показать уведомление (переименованная функция)
+function showInventoryAlert(message, type) {
     const alertDiv = document.createElement('div');
     alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
     alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
@@ -1338,53 +1111,6 @@ function showAlert(message, type) {
         if (alertDiv.parentElement) alertDiv.remove();
     }, 5000);
 }
-
-// Инициализация
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('DOM loaded, initializing inventory creator');
-    
-    // Сначала очищаем localStorage от старых ошибок
-    localStorage.removeItem('restore_draft');
-    
-    // Добавляем первую группу по умолчанию
-    setTimeout(() => {
-        addNewGroup();
-        console.log('Default group added');
-        
-        // Генерируем начальный YAML
-        setTimeout(() => {
-            generateYaml();
-            console.log('Initial YAML generated');
-        }, 200);
-        
-        // Восстанавливаем черновик если есть
-        setTimeout(() => {
-            const shouldRestore = confirm('Восстановить последний черновик?');
-            if (shouldRestore) {
-                restoreDraft();
-            }
-        }, 500);
-    }, 100);
-    
-    // Автосохранение черновика каждые 30 секунд
-    setInterval(() => {
-        const hasData = document.getElementById('inventoryName').value || 
-                       document.getElementById('inventoryDescription').value ||
-                       Object.keys(groups).length > 0;
-        
-        if (hasData) {
-            autoSaveDraft();
-        }
-    }, 30000);
-    
-    // Автоматическое обновление предпросмотра при изменении формы
-    document.getElementById('inventoryName').addEventListener('input', generateYaml);
-    document.getElementById('inventoryDescription').addEventListener('input', generateYaml);
-    document.getElementById('ansibleUser').addEventListener('input', generateYaml);
-    document.getElementById('networkOS').addEventListener('change', generateYaml);
-    document.getElementById('connectionType').addEventListener('change', generateYaml);
-    
-});
 </script>
 
 <style>
@@ -1410,15 +1136,15 @@ document.addEventListener('DOMContentLoaded', function() {
     font-family: 'Courier New', monospace;
     white-space: pre-wrap;
     word-break: break-all;
+    max-height: 500px;
+    overflow-y: auto;
 }
 
 /* Стили для уведомлений */
 .alert.position-fixed {
     box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
     border: 1px solid rgba(0,0,0,.125);
+    z-index: 9999;
 }
 </style>
-
-<!-- Подключаем библиотеку js-yaml для работы с YAML в браузере -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 {% endblock %}
