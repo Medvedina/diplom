@@ -521,15 +521,31 @@ function restoreDraft() {
 
 // Утилита для показа уведомлений
 function showAlert(message, type) {
+    // Маппинг типов на классы Bootstrap
+    const typeMap = {
+        'success': 'success',      // зеленый
+        'error': 'danger',         // красный
+        'warning': 'warning',      // желтый
+        'info': 'info',            // голубой
+        'danger': 'danger'         // красный
+    };
+    
+    // Получаем правильный класс для Bootstrap
+    const bootstrapType = typeMap[type] || 'info';
+    
     const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.className = `alert alert-${bootstrapType} alert-dismissible fade show position-fixed`;
     alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    
+    // Выбираем иконку в зависимости от типа
+    let icon = 'bi-info-circle';
+    if (type === 'success') icon = 'bi-check-circle';
+    else if (type === 'error' || type === 'danger') icon = 'bi-x-circle';
+    else if (type === 'warning') icon = 'bi-exclamation-triangle';
+    
     alertDiv.innerHTML = `
         <div class="d-flex align-items-center">
-            <i class="bi ${type === 'success' ? 'bi-check-circle' : 
-                         type === 'error' ? 'bi-x-circle' : 
-                         type === 'warning' ? 'bi-exclamation-triangle' : 
-                         'bi-info-circle'} me-2"></i>
+            <i class="bi ${icon} me-2"></i>
             <div>${message}</div>
             <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
         </div>

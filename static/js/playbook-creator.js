@@ -1,5 +1,5 @@
 // Глобальные переменные
-let tasks = [];
+let tasks = []; // Используем единое имя переменной
 let currentTaskType = null;
 let currentTaskConfig = {};
 let selectedTargets = new Set();
@@ -13,26 +13,18 @@ document.addEventListener('DOMContentLoaded', function() {
     tasksConfig = window.TASKS_CONFIG || {};
     console.log('Tasks config loaded:', tasksConfig);
     
-    initializePlaybookCreator();
-});
-
-// Инициализация
-function initializePlaybookCreator() {
-    console.log('Initializing playbook creator...');
+    console.log('DOM загружен, инициализация...');
     
-    // Добавляем первую группу по умолчанию
-    setTimeout(() => {
-        addNewGroup();
-        console.log('Default group added');
-    }, 100);
+    // Загружаем инвентари
+    loadInventories();
     
     // Настраиваем автоматическое обновление для всех полей формы
     setupAutoUpdate();
     
     // Автосохранение черновика каждые 30 секунд
     setInterval(() => {
-        const hasData = document.getElementById('playbookName').value || 
-                       document.getElementById('playbookDescription').value ||
+        const hasData = document.getElementById('playbookName')?.value || 
+                       document.getElementById('playbookDescription')?.value ||
                        tasks.length > 0;
         
         if (hasData) {
@@ -40,9 +32,51 @@ function initializePlaybookCreator() {
         }
     }, 30000);
     
-    // Загружаем инвентари
-    loadInventories();
-}
+    // Проверяем режим редактирования
+    if (window.EDIT_PLAYBOOK) {
+        console.log('Редактирование плейбука:', window.EDIT_PLAYBOOK);
+        
+        const playbookData = window.EDIT_PLAYBOOK.data;
+        const playbookName = window.EDIT_PLAYBOOK.name;
+        
+        // Устанавливаем имя плейбука
+        if (playbookName) {
+            document.getElementById('playbookName').value = playbookName;
+        }
+        
+        // Парсим целевые устройства
+        if (playbookData && Array.isArray(playbookData) && playbookData.length > 0) {
+            const targetInfo = parsePlaybookTargets(playbookData);
+            
+            if (targetInfo.hosts !== 'all') {
+                document.getElementById('targetSpecific').checked = true;
+                toggleTargetSelection();
+                
+                // Сохраняем выбранные цели
+                targetInfo.targets.forEach(target => selectedTargets.add(target));
+                document.getElementById('selectedCount').textContent = selectedTargets.size;
+                
+                // Обновляем паттерн если есть
+                if (targetInfo.hosts.includes('*')) {
+                    document.getElementById('targetPattern').value = targetInfo.hosts;
+                }
+            }
+            
+            // Парсим задачи
+            if (playbookData[0] && playbookData[0].tasks) {
+                console.log('Задачи из плейбука:', playbookData[0].tasks);
+                // Очищаем текущие задачи
+                tasks = [];
+                parsePlaybookTasks(playbookData[0].tasks);
+            }
+        }
+    } else {
+        console.log('Режим создания нового плейбука');
+    }
+    
+    // Пытаемся восстановить черновик
+    setTimeout(restoreDraft, 500);
+});
 
 // Настройка автоматического обновления
 function setupAutoUpdate() {
@@ -111,9 +145,17 @@ function loadInventories() {
                         console.log('Нет инвентарей для отображения');
                     } else {
                         availableInventories.forEach(inv => {
+                            // Подсчитываем общее количество хостов
+                            let totalHosts = 0;
+                            if (inv.groups) {
+                                inv.groups.forEach(group => {
+                                    totalHosts += group.hosts ? group.hosts.length : 0;
+                                });
+                            }
+                            
                             const option = document.createElement('option');
                             option.value = inv.name;
-                            option.textContent = `${inv.name} (${inv.groups.length} групп, ${inv.hosts.length} хостов)`;
+                            option.textContent = `${inv.name} (${inv.groups.length} групп, ${totalHosts} хостов)`;
                             select.appendChild(option);
                         });
                         console.log(`Загружено ${availableInventories.length} инвентарей`);
@@ -149,31 +191,47 @@ function loadInventoryTargets() {
         let html = '';
         
         // Группы
-        inventory.groups.forEach(group => {
-            html += `<div class="target-item group" onclick="toggleTarget('${group.name}', true)">
-                <i class="bi bi-folder me-2"></i>${group.name} 
-                <span class="badge bg-secondary">${group.hosts.length} хостов</span>
-            </div>`;
-            
-            // Хосты в группе
-            group.hosts.forEach(host => {
-                html += `<div class="target-item host" onclick="toggleTarget('${host}', false)">
-                    <i class="bi bi-pc me-2"></i>${host}
+        if (inventory.groups) {
+            inventory.groups.forEach(group => {
+                // Проверяем, выбрана ли группа
+                const isGroupSelected = selectedTargets.has(group.name);
+                html += `<div class="target-item group ${isGroupSelected ? 'selected' : ''}" 
+                            onclick="toggleTarget('${group.name}', true)">
+                    <i class="bi bi-folder me-2"></i>${group.name} 
+                    <span class="badge bg-secondary">${group.hosts ? group.hosts.length : 0} хостов</span>
                 </div>`;
+                
+                // Хосты в группе
+                if (group.hosts) {
+                    group.hosts.forEach(host => {
+                        const isHostSelected = selectedTargets.has(host);
+                        html += `<div class="target-item host ${isHostSelected ? 'selected' : ''}" 
+                                    onclick="toggleTarget('${host}', false)">
+                            <i class="bi bi-pc me-2"></i>${host}
+                        </div>`;
+                    });
+                }
             });
-        });
+        }
         
         // Отдельные хосты (если есть)
-        inventory.hosts.forEach(host => {
-            if (!inventory.groups.some(g => g.hosts.includes(host.name))) {
-                html += `<div class="target-item host" onclick="toggleTarget('${host.name}', false)">
-                    <i class="bi bi-pc me-2"></i>${host.name}
-                </div>`;
-            }
-        });
+        if (inventory.hosts) {
+            inventory.hosts.forEach(host => {
+                if (!inventory.groups || !inventory.groups.some(g => g.hosts && g.hosts.includes(host.name))) {
+                    const isHostSelected = selectedTargets.has(host.name);
+                    html += `<div class="target-item host ${isHostSelected ? 'selected' : ''}" 
+                                onclick="toggleTarget('${host.name}', false)">
+                        <i class="bi bi-pc me-2"></i>${host.name}
+                    </div>`;
+                }
+            });
+        }
         
         document.getElementById('targetsList').innerHTML = html;
         document.getElementById('loadingTargets').style.display = 'none';
+        
+        // Обновляем счетчик выбранных
+        document.getElementById('selectedCount').textContent = selectedTargets.size;
     }, 300);
 }
 
@@ -212,6 +270,21 @@ function toggleTargetSelection() {
     
     if (targetDiv) {
         targetDiv.style.display = isSpecific ? 'block' : 'none';
+        
+        // Если включен режим выбора и есть предвыбранные цели, загружаем инвентарь
+        if (isSpecific && selectedTargets.size > 0) {
+            // Пытаемся определить инвентарь по первому выбранному хосту
+            const firstTarget = Array.from(selectedTargets)[0];
+            const inventory = availableInventories.find(inv => 
+                inv.hosts?.some(h => h.name === firstTarget) || 
+                inv.groups?.some(g => g.name === firstTarget)
+            );
+            
+            if (inventory) {
+                document.getElementById('inventorySelect').value = inventory.name;
+                loadInventoryTargets();
+            }
+        }
     }
     
     updateTargetPreview();
@@ -411,6 +484,11 @@ function addConfiguredTask() {
 function renderTasks() {
     const container = document.getElementById('tasksContainer');
     
+    if (!container) {
+        console.error('Контейнер задач не найден!');
+        return;
+    }
+    
     if (tasks.length === 0) {
         container.innerHTML = `
             <div class="alert alert-info">
@@ -456,6 +534,7 @@ function renderTasks() {
     });
     
     container.innerHTML = html;
+    console.log(`Отображено ${tasks.length} задач`);
 }
 
 // Рендер параметров задачи
@@ -659,10 +738,237 @@ function generateYamlPreview() {
             lineWidth: -1,
             noRefs: true
         });
-        document.getElementById('yamlPreview').textContent = yamlStr;
+        const previewElement = document.getElementById('yamlPreview');
+        if (previewElement) {
+            previewElement.textContent = yamlStr;
+        }
     } catch (e) {
-        document.getElementById('yamlPreview').textContent = '# Ошибка генерации YAML: ' + e.message;
+        console.error('Ошибка генерации YAML:', e);
+        const previewElement = document.getElementById('yamlPreview');
+        if (previewElement) {
+            previewElement.textContent = '# Ошибка генерации YAML: ' + e.message;
+        }
     }
+}
+
+// Функция для парсинга задач из плейбука
+function parsePlaybookTasks(tasksData) {
+    if (!tasksData || !Array.isArray(tasksData)) {
+        console.log('Нет задач для парсинга');
+        return;
+    }
+    
+    console.log('Парсинг задач из плейбука...');
+    console.log('Исходные задачи:', tasksData);
+    
+    tasksData.forEach((task, index) => {
+        console.log(`Обработка задачи ${index + 1}:`, task);
+        
+        // Определяем тип задачи по модулю
+        let taskType = null;
+        let taskParams = {};
+        let taskName = task.name || `Задача ${index + 1}`;
+        
+        if (task.ping) {
+            taskType = 'ping';
+            taskParams = task.ping || {};
+            console.log('  Тип: ping');
+        } else if (task.ios_config) {
+            const lines = task.ios_config.lines || [];
+            const joinedLines = lines.join(' ');
+            
+            if (joinedLines.includes('router ospf')) {
+                taskType = 'ospf';
+                taskParams = parseOspfParams(lines);
+                console.log('  Тип: ospf');
+            } else if (joinedLines.includes('router isis')) {
+                taskType = 'isis';
+                taskParams = parseIsisParams(lines);
+                console.log('  Тип: isis');
+            } else if (joinedLines.includes('spanning-tree')) {
+                if (joinedLines.includes('rapid')) {
+                    taskType = 'rstp';
+                } else {
+                    taskType = 'stp';
+                }
+                taskParams = parseStpParams(lines);
+                console.log('  Тип: stp/rstp');
+            } else if (joinedLines.includes('interface')) {
+                taskType = 'interface_config';
+                taskParams = parseInterfaceParams(lines);
+                console.log('  Тип: interface');
+            } else {
+                taskType = 'update_config';
+                taskParams = {
+                    lines: lines.join('\n'),
+                    parents: task.ios_config.parents ? task.ios_config.parents[0] : '',
+                    save: task.ios_config.save || true,
+                    match: task.ios_config.match || 'line'
+                };
+                console.log('  Тип: update_config');
+            }
+        } else if (task.ios_vlan) {
+            taskType = 'vlan';
+            taskParams = task.ios_vlan || {};
+            console.log('  Тип: vlan');
+        } else if (task.ios_command) {
+            taskType = 'backup_config';
+            taskParams = {
+                destination: task.destination || '/backups',
+                compress: false
+            };
+            console.log('  Тип: backup_config');
+        } else {
+            console.log('  Неизвестный тип задачи:', task);
+            return;
+        }
+        
+        if (taskType) {
+            const taskConfig = tasksConfig[taskType] || {
+                icon: 'bi-gear',
+                color: 'secondary'
+            };
+            
+            tasks.push({
+                id: taskIdCounter++,
+                type: taskType,
+                name: taskName,
+                icon: taskConfig.icon,
+                color: taskConfig.color,
+                params: taskParams
+            });
+            
+            console.log(`  Добавлена задача: ${taskName} (${taskType})`);
+        }
+    });
+    
+    console.log(`Всего задач после парсинга: ${tasks.length}`);
+    
+    // Принудительно отображаем задачи
+    renderTasks();
+    
+    // Обновляем предпросмотр
+    triggerYamlUpdate();
+}
+
+// Вспомогательные функции для парсинга параметров
+function parseOspfParams(lines) {
+    const params = {
+        process_id: 1,
+        router_id: '',
+        network: '',
+        area: 0
+    };
+    
+    lines.forEach(line => {
+        if (line.includes('router ospf')) {
+            const match = line.match(/router ospf (\d+)/);
+            if (match) params.process_id = parseInt(match[1]);
+        } else if (line.includes('router-id')) {
+            params.router_id = line.replace('router-id', '').trim();
+        } else if (line.includes('network')) {
+            params.network = line.replace('network', '').trim();
+        }
+    });
+    
+    return params;
+}
+
+function parseIsisParams(lines) {
+    const params = {
+        net: '',
+        system_id: '',
+        area: '',
+        level: 'level-1-2'
+    };
+    
+    lines.forEach(line => {
+        if (line.includes('net')) {
+            params.net = line.replace('net', '').trim();
+        } else if (line.includes('is-type')) {
+            params.level = line.replace('is-type', '').trim();
+        }
+    });
+    
+    return params;
+}
+
+function parseStpParams(lines) {
+    const params = {
+        mode: 'pvst',
+        priority: 32768,
+        vlan: '1',
+        root_primary: false,
+        portfast: false,
+        bpduguard: false
+    };
+    
+    lines.forEach(line => {
+        if (line.includes('spanning-tree mode')) {
+            params.mode = line.replace('spanning-tree mode', '').trim();
+        } else if (line.includes('priority')) {
+            const match = line.match(/priority (\d+)/);
+            if (match) params.priority = parseInt(match[1]);
+        } else if (line.includes('root primary')) {
+            params.root_primary = true;
+        } else if (line.includes('portfast default')) {
+            params.portfast = true;
+        } else if (line.includes('bpduguard default')) {
+            params.bpduguard = true;
+        }
+    });
+    
+    return params;
+}
+
+function parseInterfaceParams(lines) {
+    const params = {
+        interface: 'GigabitEthernet0/1',
+        description: '',
+        ip_address: '',
+        admin_state: 'up'
+    };
+    
+    lines.forEach(line => {
+        if (line.startsWith('interface')) {
+            params.interface = line.replace('interface', '').trim();
+        } else if (line.includes('description')) {
+            params.description = line.replace('description', '').trim();
+        } else if (line.includes('ip address')) {
+            params.ip_address = line.replace('ip address', '').trim();
+        } else if (line.includes('shutdown')) {
+            params.admin_state = 'down';
+        } else if (line.includes('no shutdown')) {
+            params.admin_state = 'up';
+        }
+    });
+    
+    return params;
+}
+
+// Функция для парсинга целевых устройств из плейбука
+function parsePlaybookTargets(playbookData) {
+    if (!playbookData || !Array.isArray(playbookData) || playbookData.length === 0) {
+        return { hosts: 'all', targets: new Set() };
+    }
+    
+    const firstPlay = playbookData[0];
+    const target = firstPlay.hosts || 'all';
+    
+    console.log('Цель плейбука:', target);
+    
+    if (target === 'all') {
+        return { hosts: 'all', targets: new Set() };
+    }
+    
+    // Если это список хостов через двоеточие
+    if (target.includes(':')) {
+        const hosts = target.split(':').map(h => h.trim());
+        return { hosts: target, targets: new Set(hosts) };
+    }
+    
+    // Если это один хост или группа
+    return { hosts: target, targets: new Set([target]) };
 }
 
 // Сохранение плейбука
@@ -1229,17 +1535,33 @@ function getParamHelp(protocol, paramName) {
     return paramHelpTexts[protocol]?.[paramName] || null;
 }
 
-// Уведомления
+// Утилита для показа уведомлений
 function showAlert(message, type) {
+    // Маппинг типов на классы Bootstrap
+    const typeMap = {
+        'success': 'success',      // зеленый
+        'error': 'danger',         // красный
+        'warning': 'warning',      // желтый
+        'info': 'info',            // голубой
+        'danger': 'danger'         // красный
+    };
+    
+    // Получаем правильный класс для Bootstrap
+    const bootstrapType = typeMap[type] || 'info';
+    
     const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.className = `alert alert-${bootstrapType} alert-dismissible fade show position-fixed`;
     alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    
+    // Выбираем иконку в зависимости от типа
+    let icon = 'bi-info-circle';
+    if (type === 'success') icon = 'bi-check-circle';
+    else if (type === 'error' || type === 'danger') icon = 'bi-x-circle';
+    else if (type === 'warning') icon = 'bi-exclamation-triangle';
+    
     alertDiv.innerHTML = `
         <div class="d-flex align-items-center">
-            <i class="bi ${type === 'success' ? 'bi-check-circle' : 
-                         type === 'error' ? 'bi-x-circle' : 
-                         type === 'warning' ? 'bi-exclamation-triangle' : 
-                         'bi-info-circle'} me-2"></i>
+            <i class="bi ${icon} me-2"></i>
             <div>${message}</div>
             <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
         </div>
@@ -1250,21 +1572,7 @@ function showAlert(message, type) {
     }, 5000);
 }
 
-// Инициализация при загрузке
-document.addEventListener('DOMContentLoaded', function() {
-    // Загружаем конфигурацию задач из data-атрибута или передаем через глобальную переменную
-    if (window.TASKS_CONFIG) {
-        tasksConfig = window.TASKS_CONFIG;
-    }
-    
-    initializePlaybookCreator();
-    
-    // Пытаемся восстановить черновик
-    setTimeout(restoreDraft, 500);
-});
-
 // Добавляем новые функции, которые были в шаблоне
 function addNewGroup() {
-    // Эта функция больше не используется в новой версии
     console.log('addNewGroup is deprecated');
 }

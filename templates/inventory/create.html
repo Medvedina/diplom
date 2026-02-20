@@ -10,6 +10,18 @@
 {% endblock %}
 
 {% block content %}
+
+<!-- Скрытые поля для передачи данных при редактировании -->
+{% if edit_playbook and playbook_data %}
+<script>
+    window.EDIT_PLAYBOOK = {
+        name: "{{ edit_playbook }}",
+        data: {{ playbook_data|tojson|safe }}
+    };
+    console.log('Режим редактирования:', window.EDIT_PLAYBOOK);
+</script>
+{% endif %}
+
 <div class="container-fluid">
     <!-- Заголовок -->
     <div class="d-flex justify-content-between align-items-center mb-4">

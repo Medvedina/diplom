@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request, current_app
+from flask import Blueprint, render_template, jsonify, request, current_app, flash, redirect, url_for
 from datetime import datetime
 import os
 import json
@@ -188,13 +188,77 @@ def pb_list():
 @set_active_tab('playbooks')
 def create():
     """Страница создания плейбука"""
-    return render_template('playbooks/create.html', tasks_config=TASKS_CONFIG)
+    # Получаем параметр edit из URL (имя плейбука для редактирования)
+    edit_playbook = request.args.get('edit')
+    playbook_data = None
+    playbook_name = None
+    
+    if edit_playbook:
+        try:
+            # Загружаем существующий плейбук
+            playbooks_path = os.path.join(current_app.root_path, 'ansible_data', 'playbooks')
+            file_path = os.path.join(playbooks_path, edit_playbook)
+            
+            if os.path.exists(file_path):
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                    playbook_data = yaml.safe_load(content)
+                    playbook_name = edit_playbook
+                    
+                print(f"Загружен плейбук для редактирования: {playbook_name}")
+        except Exception as e:
+            print(f"Ошибка загрузки плейбука {edit_playbook}: {e}")
+    
+    return render_template('playbooks/create.html', 
+                         tasks_config=TASKS_CONFIG,
+                         edit_playbook=playbook_name,
+                         playbook_data=playbook_data)
 
 @bp.route('/edit/<playbook_name>')
+
 @set_active_tab('playbooks')
 def edit(playbook_name):
     """Страница редактирования плейбука"""
-    return render_template('playbooks/edit.html', playbook_name=playbook_name)
+    try:
+        # Получаем путь к плейбукам
+        playbooks_path = os.path.join(current_app.root_path, 'ansible_data', 'playbooks')
+        file_path = os.path.join(playbooks_path, playbook_name)
+        
+        # Проверяем существование файла
+        if not os.path.exists(file_path):
+            # Пробуем добавить расширение .yml если его нет
+            if not playbook_name.endswith(('.yml', '.yaml')):
+                for ext in ['.yml', '.yaml']:
+                    test_path = os.path.join(playbooks_path, playbook_name + ext)
+                    if os.path.exists(test_path):
+                        file_path = test_path
+                        playbook_name = playbook_name + ext
+                        break
+        
+        # Если файл не найден
+        if not os.path.exists(file_path):
+            flash(f'Плейбук {playbook_name} не найден', 'error')
+            return redirect(url_for('playbooks.list'))
+        
+        # Читаем содержимое файла
+        with open(file_path, 'r', encoding='utf-8') as f:
+            yaml_content = f.read()
+        
+        # Получаем информацию о файле
+        file_stat = os.stat(file_path)
+        modified = datetime.fromtimestamp(file_stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+        file_size = file_stat.st_size
+        
+        return render_template('playbooks/edit.html',
+                             playbook_name=playbook_name,
+                             yaml_content=yaml_content,
+                             modified=modified,
+                             file_size=file_size)
+        
+    except Exception as e:
+        current_app.logger.error(f"Error loading playbook {playbook_name}: {e}")
+        flash(f'Ошибка загрузки плейбука: {str(e)}', 'error')
+        return redirect(url_for('playbooks.list'))
 
 @bp.route('/run/<playbook_name>')
 @set_active_tab('playbooks')

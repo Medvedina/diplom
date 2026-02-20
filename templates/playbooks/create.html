@@ -133,6 +133,33 @@
 {% endblock %}
 
 {% block content %}
+<!-- Скрытые поля для передачи данных при редактировании -->
+{% if edit_playbook and playbook_data %}
+<script>
+    window.EDIT_PLAYBOOK = {
+        name: "{{ edit_playbook }}",
+        data: {{ playbook_data|tojson|safe }}
+    };
+    console.log('Режим редактирования активирован');
+    console.log('Имя плейбука:', window.EDIT_PLAYBOOK.name);
+    console.log('Данные плейбука:', window.EDIT_PLAYBOOK.data);
+    
+    // Дополнительная проверка
+    if (window.EDIT_PLAYBOOK.data && Array.isArray(window.EDIT_PLAYBOOK.data)) {
+        console.log('Количество плейбуков:', window.EDIT_PLAYBOOK.data.length);
+        if (window.EDIT_PLAYBOOK.data.length > 0) {
+            console.log('Первый плейбук:', window.EDIT_PLAYBOOK.data[0]);
+            if (window.EDIT_PLAYBOOK.data[0].tasks) {
+                console.log('Задачи:', window.EDIT_PLAYBOOK.data[0].tasks);
+            }
+        }
+    }
+</script>
+{% else %}
+<script>
+    console.log('Режим создания нового плейбука');
+</script>
+{% endif %}
 <div class="container-fluid">
     <!-- Заголовок -->
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -295,31 +322,9 @@
                     </div>
                 </div>
             </div>
-
-            <!-- Быстрые действия -->
-            <div class="card shadow mb-4">
-                <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">
-                        <i class="bi bi-lightning me-2"></i>Быстрые действия
-                    </h6>
-                </div>
-                <div class="card-body">
-                    <div class="d-grid gap-2">
-                        <button class="btn btn-outline-primary" onclick="validatePlaybook()">
-                            <i class="bi bi-check-circle me-1"></i>Проверить синтаксис
-                        </button>
-                        <button class="btn btn-outline-success" onclick="loadTemplate('network_basic')">
-                            <i class="bi bi-file-text me-1"></i>Шаблон: базовая сеть
-                        </button>
-                        <button class="btn btn-outline-success" onclick="loadTemplate('stp_vlan')">
-                            <i class="bi bi-file-text me-1"></i>Шаблон: STP + VLAN
-                        </button>
-                    </div>
-                </div>
             </div>
         </div>
-    </div>
-</div>
+
 
 <!-- Модальное окно выбора задачи -->
 <div class="modal fade" id="taskSelectorModal" tabindex="-1">

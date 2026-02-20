@@ -142,7 +142,6 @@ def datetime_filter(value):
     try:
         # Пытаемся распарсить строку даты
         if isinstance(value, str):
-            # Пробуем разные форматы
             for fmt in ('%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d'):
                 try:
                     dt = datetime.strptime(value, fmt)
