@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}Редактирование плейбука - Ansible Control Panel{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{{ url_for('playbooks.pb_list') }}">Плейбуки</a>
+    </li>
+    <li class="breadcrumb-item active">{{ playbook_name }}</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="bi bi-pencil-square me-2"></i>Редактирование плейбука
+            </h1>
+            <p class="text-muted mb-0">
+                {{ playbook_name }} · 
+                <small>Изменен: {{ modified }} · Размер: {{ file_size }} байт</small>
+            </p>
+        </div>
+        <div class="btn-group">
+            <a href="{{ url_for('playbooks.pb_list') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Назад
+            </a>
+            <button class="btn btn-primary" onclick="savePlaybook()">
+                <i class="bi bi-save me-1"></i>Сохранить
+            </button>
+            <button class="btn btn-outline-success" onclick="validateYaml()">
+                <i class="bi bi-check-circle me-1"></i>Проверить
+            </button>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Редактор YAML -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-code-slash me-2"></i>Редактор YAML
+                    </h6>
+                    <div>
+                        <span class="badge bg-info me-2" id="lineCount">0 строк</span>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="formatYaml()">
+                            <i class="bi bi-braces"></i> Форматировать
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <textarea id="yamlEditor" class="form-control border-0 rounded-0 font-monospace" 
+                              rows="25" style="font-size: 0.875rem;">{{ yaml_content }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <!-- Информация и инструменты -->
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-info-circle me-2"></i>Информация
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between px-0">
+                            <span>Имя файла:</span>
+                            <strong>{{ playbook_name }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0">
+                            <span>Последнее изменение:</span>
+                            <strong>{{ modified }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0">
+                            <span>Размер:</span>
+                            <strong>{{ file_size }} байт</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0">
+                            <span>Строк:</span>
+                            <strong id="statsLines">0</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between px-0">
+                            <span>Задач:</span>
+                            <strong id="statsTasks">0</strong>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-tools me-2"></i>Инструменты
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary" onclick="validateYaml()">
+                            <i class="bi bi-check-circle me-1"></i>Проверить YAML
+                        </button>
+                        <button class="btn btn-outline-success" onclick="formatYaml()">
+                            <i class="bi bi-braces me-1"></i>Форматировать
+                        </button>
+                        <button class="btn btn-outline-info" onclick="openVisualEditor()">
+                            <i class="bi bi-grid me-1"></i>Визуальный редактор
+                        </button>
+
+                        <script>
+                        function openVisualEditor() {
+                            if (confirm('Перейти в визуальный редактор? Несохраненные изменения будут потеряны.')) {
+                                window.location.href = '/playbooks/create?edit={{ playbook_name }}';
+                            }
+                        }
+                        </script>
+                        
+                        <hr>
+                        <button class="btn btn-outline-warning" onclick="runPlaybook()">
+                            <i class="bi bi-play-fill me-1"></i>Запустить
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Модальное окно предпросмотра -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Предпросмотр YAML</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="previewContent" class="bg-light p-3 rounded" style="max-height: 500px; overflow-y: auto;"></pre>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script>
+// Инициализация при загрузке
+document.addEventListener('DOMContentLoaded', function() {
+    updateStats();
+    
+    // Обновляем статистику при изменении текста
+    document.getElementById('yamlEditor').addEventListener('input', updateStats);
+});
+
+// Обновление статистики
+function updateStats() {
+    const content = document.getElementById('yamlEditor').value;
+    const lines = content.split('\n').length;
+    document.getElementById('lineCount').textContent = lines + ' строк';
+    document.getElementById('statsLines').textContent = lines;
+    
+    // Подсчет задач (приблизительно)
+    try {
+        const data = jsyaml.load(content);
+        if (Array.isArray(data) && data.length > 0 && data[0].tasks) {
+            document.getElementById('statsTasks').textContent = data[0].tasks.length;
+        } else {
+            document.getElementById('statsTasks').textContent = '0';
+        }
+    } catch {
+        document.getElementById('statsTasks').textContent = '?';
+    }
+}
+
+// Сохранение плейбука
+// Сохранение плейбука - ИСПРАВЛЕННАЯ ВЕРСИЯ
+function savePlaybook() {
+    const content = document.getElementById('yamlEditor').value;
+    
+    if (!content.trim()) {
+        showAlert('Плейбук не может быть пустым', 'warning');
+        return;
+    }
+    
+    // Проверяем валидность YAML перед отправкой
+    try {
+        jsyaml.load(content);
+    } catch (e) {
+        showAlert('Ошибка в YAML: ' + e.message, 'error');
+        return;
+    }
+    
+    const saveBtn = document.querySelector('button[onclick="savePlaybook()"]');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Сохранение...';
+    saveBtn.disabled = true;
+    
+    // Формируем данные для отправки
+    const requestData = {
+        name: '{{ playbook_name }}',
+        content: content,
+        action: 'save'
+    };
+    
+    console.log('Sending data:', requestData); // Для отладки
+    
+    fetch('/playbooks/api/save-playbook', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify(requestData)
+    })
+    .then(response => {
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Response data:', data);
+        if (data.success) {
+            showAlert('Плейбук успешно сохранен', 'success');
+            setTimeout(() => window.location.reload(), 1500);
+        } else {
+            showAlert('Ошибка: ' + (data.message || 'Неизвестная ошибка'), 'error');
+            saveBtn.innerHTML = originalText;
+            saveBtn.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('Ошибка сети: ' + error.message, 'error');
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    });
+}
+
+// Валидация YAML
+function validateYaml() {
+    const content = document.getElementById('yamlEditor').value;
+    
+    fetch('/playbooks/api/validate-playbook', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({content: content})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.valid) {
+            showAlert('✓ YAML синтаксис корректен', 'success');
+        } else {
+            showAlert('✗ Ошибка: ' + data.message, 'error');
+        }
+    });
+}
+
+// Форматирование YAML
+function formatYaml() {
+    const content = document.getElementById('yamlEditor').value;
+    
+    try {
+        const data = jsyaml.load(content);
+        const formatted = jsyaml.dump(data, {
+            indent: 2,
+            lineWidth: -1,
+            noRefs: true
+        });
+        document.getElementById('yamlEditor').value = formatted;
+        updateStats();
+        showAlert('YAML отформатирован', 'success');
+    } catch (e) {
+        showAlert('Ошибка форматирования: ' + e.message, 'error');
+    }
+}
+
+// Предпросмотр
+function previewYaml() {
+    const content = document.getElementById('yamlEditor').value;
+    document.getElementById('previewContent').textContent = content;
+    
+    const modal = new bootstrap.Modal(document.getElementById('previewModal'));
+    modal.show();
+}
+
+// Запуск плейбука
+function runPlaybook() {
+    if (confirm('Запустить этот плейбук?')) {
+        window.location.href = "{{ url_for('playbooks.run', playbook_name=playbook_name) }}";
+    }
+}
+
+// Уведомления
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    alertDiv.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="bi ${type === 'success' ? 'bi-check-circle' : 
+                         type === 'error' ? 'bi-x-circle' : 
+                         'bi-info-circle'} me-2"></i>
+            <div>${message}</div>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+    document.body.appendChild(alertDiv);
+    setTimeout(() => alertDiv.remove(), 5000);
+}
+</script>
+
+<style>
+#yamlEditor {
+    font-family: 'Courier New', monospace;
+    line-height: 1.5;
+    tab-size: 2;
+}
+
+#yamlEditor:focus {
+    outline: none;
+    box-shadow: none;
+}
+
+.list-group-item {
+    border: none;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.list-group-item:last-child {
+    border-bottom: none;
+}
+</style>
+{% endblock %}

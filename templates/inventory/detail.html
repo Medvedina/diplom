@@ -1,0 +1,524 @@
+{% extends "base.html" %}
+
+{% block title %}{{ inventory_name }} - Инвентарь{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col">
+            <h1><i class="bi bi-list-check"></i> {{ inventory_name }}</h1>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('inventory.inventory_list') }}">Инвентари</a></li>
+                    <li class="breadcrumb-item active">{{ inventory_name }}</li>
+                </ol>
+            </nav>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" onclick="refreshHostStatus()">
+                <i class="bi bi-arrow-clockwise"></i> Обновить статус
+            </button>
+            <button class="btn btn-success" onclick="checkAllHosts()">
+                <i class="bi bi-wifi"></i> Проверить доступность
+            </button>
+        </div>
+    </div>
+
+    <!-- Карточки статистики -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Доступны</h5>
+                    <h2 id="up-count" class="mb-0">0</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-danger text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Недоступны</h5>
+                    <h2 id="down-count" class="mb-0">0</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Ошибка SSH</h5>
+                    <h2 id="ssh-error-count" class="mb-0">0</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h5 class="card-title">Всего</h5>
+                    <h2 id="total-count" class="mb-0">{{ total_hosts }}</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-9">
+            {% for group_name, group_data in inventory.all.children.items() %}
+            <div class="card mb-3">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-collection"></i> {{ group_name }}
+                        <span class="badge bg-light text-dark float-end">
+                            {{ group_data.hosts|length }} хостов
+                        </span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Хост</th>
+                                    <th>IP Адрес</th>
+                                    <th>Роль</th>
+                                    <th>Статус</th>
+                                    <th>Время ответа</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for host_name, host_vars in group_data.hosts.items() %}
+                                {% set status = host_statuses.get(host_name, 'unknown') %}
+                                {% set role = host_roles.get(host_name, 'unknown') %}
+                                <tr class="host-row" data-host="{{ host_name }}" data-status="{{ status }}">
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <div class="host-status-indicator me-2 status-{{ status }}"
+                                                 title="{{ status }}"></div>
+                                            <strong>{{ host_name }}</strong>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <code>{{ host_vars.get('ansible_host', host_name) if host_vars is mapping else host_name }}</code>
+                                    </td>
+                                    <td>
+                                        {% if role == 'router' %}
+                                            <span class="badge bg-danger">
+                                                <i class="bi bi-router me-1"></i>Маршрутизатор
+                                            </span>
+                                        {% elif role == 'switch' %}
+                                            <span class="badge bg-warning">
+                                                <i class="bi bi-hdd-stack me-1"></i>Коммутатор
+                                            </span>
+                                        {% elif role == 'firewall' %}
+                                            <span class="badge bg-info">
+                                                <i class="bi bi-shield-check me-1"></i>Файрвол
+                                            </span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ role }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-{{ 'success' if status == 'up' else 'danger' if status == 'down' else 'warning' if status == 'ssh_error' else 'secondary' }} status-badge" 
+                                              id="status-{{ host_name|replace('.', '-') }}">
+                                            {% if status == 'up' %}
+                                                <i class="bi bi-check-circle me-1"></i>Доступен
+                                            {% elif status == 'down' %}
+                                                <i class="bi bi-x-circle me-1"></i>Недоступен
+                                            {% elif status == 'ssh_error' %}
+                                                <i class="bi bi-exclamation-triangle me-1"></i>Ошибка SSH
+                                            {% else %}
+                                                <i class="bi bi-question-circle me-1"></i>Неизвестно
+                                            {% endif %}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="response-time text-muted small" id="time-{{ host_name|replace('.', '-') }}">
+                                            {{ host_vars.get('response_time', '—') }} ms
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm">
+                                            <button class="btn btn-outline-primary" title="Проверить"
+                                                    onclick="checkSingleHost('{{ host_name }}')">
+                                                <i class="bi bi-arrow-repeat"></i>
+                                            </button>
+                                            <button class="btn btn-outline-primary" title="Подключиться"
+                                                    onclick="checkSingleHost('{{ host_name }}')">
+                                                <i class="bi bi-terminal"></i>
+                                            </button>
+                                            <a href="{{ url_for('hosts.api_check_host', hostname=host_name) }}" 
+                                               class="btn btn-outline-info" title="Подробнее">
+                                                <i class="bi bi-info-circle"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> Информация</h5>
+                </div>
+                <div class="card-body">
+                    <h6>Глобальные переменные:</h6>
+                    <ul class="list-unstyled">
+                        {% for key, value in inventory.all.vars.items() %}
+                        <li><strong>{{ key }}:</strong> <code>{{ value }}</code></li>
+                        {% endfor %}
+                    </ul>
+                    
+                    <hr>
+                    
+                    <h6>Статистика:</h6>
+                    <div class="d-flex justify-content-between">
+                        <span>Всего групп:</span>
+                        <strong>{{ inventory.all.children|length }}</strong>
+                    </div>
+                    {% set total_hosts = [] %}
+                    {% for group in inventory.all.children.values() %}
+                        {% if group.hosts %}
+                            {% for _ in group.hosts %}
+                                {% set _ = total_hosts.append(1) %}
+                            {% endfor %}
+                        {% endif %}
+                    {% endfor %}
+                    <div class="d-flex justify-content-between">
+                        <span>Всего хостов:</span>
+                        <strong>{{ total_hosts|length }}</strong>
+                    </div>
+                    
+                    <hr>
+                    
+                    <h6>Распределение ролей:</h6>
+                    <div id="role-stats">
+                        <!-- Будет заполнено JavaScript -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="bi bi-lightning-charge"></i> Быстрые действия</h5>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-success w-100 mb-2" onclick="checkAllHosts()">
+                        <i class="bi bi-wifi"></i> Проверить все хосты
+                    </button>
+                    <button class="btn btn-primary w-100 mb-2" onclick="runPlaybookOnInventory()">
+                        <i class="bi bi-play-circle"></i> Запустить плейбук
+                    </button>
+                    <button class="btn btn-outline-secondary w-100" onclick="exportInventory()">
+                        <i class="bi bi-download"></i> Экспорт инвентаря
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Глобальные переменные
+let currentInventory = '{{ inventory_name }}';
+
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    // Запускаем проверку всех хостов при загрузке
+    checkAllHosts();
+    
+    // Обновляем статистику ролей
+    updateRoleStats();
+});
+
+// Проверка всех хостов в инвентаре
+function checkAllHosts() {
+    const hosts = [];
+    
+    {% if inventory and inventory.all and inventory.all.children %}
+        {% for group_name, group_data in inventory.all.children.items() %}
+            {% if group_data.hosts %}
+                {% for host_name in group_data.hosts.keys() %}
+                    hosts.push("{{ host_name }}");
+                {% endfor %}
+            {% endif %}
+        {% endfor %}
+    {% endif %}
+    
+    if (hosts.length === 0) {
+        showAlert('Нет хостов для проверки', 'warning');
+        return;
+    }
+    
+    showAlert(`Проверка ${hosts.length} хостов...`, 'info');
+    
+    fetch('/inventory/api/check-inventory-hosts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            inventory: currentInventory,
+            hosts: hosts
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            data.results.forEach(result => {
+                updateHostStatusUI(result.host, result.status, result.response_time);
+            });
+            updateStatistics(data.results);
+            showAlert('Проверка завершена', 'success');
+        } else {
+            showAlert('Ошибка: ' + data.message, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('Ошибка при проверке', 'error');
+    });
+}
+
+// Проверка одного хоста
+function checkSingleHost(hostName) {
+    fetch('/inventory/api/check-inventory-hosts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            inventory: currentInventory,
+            hosts: [hostName]
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.results.length > 0) {
+            const result = data.results[0];
+            updateHostStatusUI(result.host, result.status, result.response_time);
+            updateStatistics(data.results);
+            showAlert(`Хост ${hostName}: ${result.status}`, 
+                     result.status === 'up' ? 'success' : 'warning');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('Ошибка при проверке', 'error');
+    });
+}
+
+// Обновление статуса хоста в интерфейсе
+function updateHostStatusUI(host, status, responseTime) {
+    const statusElement = document.getElementById('status-' + host.replace(/\./g, '-'));
+    const timeElement = document.getElementById('time-' + host.replace(/\./g, '-'));
+    const row = document.querySelector(`.host-row[data-host="${host}"]`);
+    
+    if (statusElement) {
+        let badgeClass, icon, text;
+        switch(status) {
+            case 'up':
+                badgeClass = 'success';
+                icon = 'bi-check-circle';
+                text = 'Доступен';
+                break;
+            case 'down':
+                badgeClass = 'danger';
+                icon = 'bi-x-circle';
+                text = 'Недоступен';
+                break;
+            case 'ssh_error':
+                badgeClass = 'warning';
+                icon = 'bi-exclamation-triangle';
+                text = 'Ошибка SSH';
+                break;
+            default:
+                badgeClass = 'secondary';
+                icon = 'bi-question-circle';
+                text = 'Неизвестно';
+        }
+        
+        statusElement.className = `badge bg-${badgeClass} status-badge`;
+        statusElement.innerHTML = `<i class="bi ${icon} me-1"></i>${text}`;
+    }
+    
+    if (timeElement) {
+        timeElement.textContent = responseTime ? `${responseTime} ms` : '—';
+    }
+    
+    if (row) {
+        row.setAttribute('data-status', status);
+        
+        // Обновляем индикатор
+        const indicator = row.querySelector('.host-status-indicator');
+        if (indicator) {
+            indicator.className = `host-status-indicator me-2 status-${status}`;
+            indicator.title = status;
+        }
+    }
+}
+
+// Обновление статистики
+function updateStatistics(results) {
+    let up = 0, down = 0, sshError = 0;
+    
+    results.forEach(result => {
+        switch(result.status) {
+            case 'up':
+                up++;
+                break;
+            case 'down':
+                down++;
+                break;
+            case 'ssh_error':
+                sshError++;
+                break;
+        }
+    });
+    
+    document.getElementById('up-count').textContent = up;
+    document.getElementById('down-count').textContent = down;
+    document.getElementById('ssh-error-count').textContent = sshError;
+}
+
+// Обновление статистики по ролям
+function updateRoleStats() {
+    const roles = {};
+    
+    {% for group_name, group_data in inventory.all.children.items() %}
+        {% if group_data.hosts %}
+            {% for host_name, host_vars in group_data.hosts.items() %}
+                {% set role = host_roles.get(host_name, 'unknown') %}
+                if (!roles['{{ role }}']) roles['{{ role }}'] = 0;
+                roles['{{ role }}']++;
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
+    
+    let html = '';
+    for (const [role, count] of Object.entries(roles)) {
+        let icon = 'bi-question-circle';
+        let color = 'secondary';
+        
+        if (role === 'router') {
+            icon = 'bi-router';
+            color = 'danger';
+        } else if (role === 'switch') {
+            icon = 'bi-hdd-stack';
+            color = 'warning';
+        } else if (role === 'firewall') {
+            icon = 'bi-shield-check';
+            color = 'info';
+        }
+        
+        html += `
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span><i class="bi ${icon} text-${color} me-2"></i>${role}:</span>
+                <span class="badge bg-${color} rounded-pill">${count}</span>
+            </div>
+        `;
+    }
+    
+    document.getElementById('role-stats').innerHTML = html || '<p class="text-muted">Нет данных</p>';
+}
+
+// Функции для быстрых действий
+function runPlaybookOnInventory() {
+    window.location.href = `/playbooks/run?inventory=${encodeURIComponent(currentInventory)}`;
+}
+
+function exportInventory() {
+    window.open(`/inventory/api/export/${encodeURIComponent(currentInventory)}`, '_blank');
+}
+
+// Утилита для уведомлений
+function showAlert(message, type) {
+    const typeMap = {
+        'success': 'success',
+        'error': 'danger',
+        'warning': 'warning',
+        'info': 'info'
+    };
+    
+    const bootstrapType = typeMap[type] || 'info';
+    
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${bootstrapType} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    
+    const icon = type === 'success' ? 'bi-check-circle' : 
+                type === 'error' ? 'bi-x-circle' : 
+                type === 'warning' ? 'bi-exclamation-triangle' : 'bi-info-circle';
+    
+    alertDiv.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="bi ${icon} me-2"></i>
+            <div>${message}</div>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    setTimeout(() => {
+        if (alertDiv.parentElement) alertDiv.remove();
+    }, 5000);
+}
+</script>
+
+<style>
+/* Стили для индикаторов статуса */
+.host-status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.host-status-indicator.status-up {
+    background-color: #28a745;
+    box-shadow: 0 0 5px rgba(40, 167, 69, 0.5);
+}
+
+.host-status-indicator.status-down {
+    background-color: #dc3545;
+    box-shadow: 0 0 5px rgba(220, 53, 69, 0.5);
+}
+
+.host-status-indicator.status-ssh_error {
+    background-color: #ffc107;
+    box-shadow: 0 0 5px rgba(255, 193, 7, 0.5);
+}
+
+.host-status-indicator.status-unknown {
+    background-color: #6c757d;
+    box-shadow: 0 0 5px rgba(108, 117, 125, 0.5);
+}
+
+/* Стили для таблицы */
+.host-row:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+.status-badge {
+    font-size: 0.85rem;
+    padding: 0.35rem 0.65rem;
+}
+
+.response-time {
+    font-size: 0.8rem;
+}
+
+/* Анимация для обновления */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.updating {
+    animation: pulse 1s infinite;
+}
+</style>
+{% endblock %}

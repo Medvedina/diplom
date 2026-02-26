@@ -1,0 +1,74 @@
+[
+  {
+    "id": "inv_1765822077.7674",
+    "type": "inventory",
+    "action": "edit",
+    "inventory": "cum",
+    "user": "admin",
+    "comment": "Изменения в инвентаре",
+    "timestamp": "2025-12-15T21:07:57.766930",
+    "display_time": "21:07",
+    "icon": "bi-pencil",
+    "color": "warning"
+  },
+  {
+    "id": "inv_1765821873.779563",
+    "type": "inventory",
+    "action": "create",
+    "inventory": "cum",
+    "user": "admin",
+    "comment": "Создан новый инвентарь",
+    "timestamp": "2025-12-15T21:04:33.779026",
+    "display_time": "21:04",
+    "icon": "bi-plus-circle",
+    "color": "success"
+  },
+  {
+    "id": "inv_1765821779.104045",
+    "type": "inventory",
+    "action": "delete",
+    "inventory": "dfgdsfg",
+    "user": "admin",
+    "comment": "Инвентарь удален",
+    "timestamp": "2025-12-15T21:02:59.103453",
+    "display_time": "21:02",
+    "icon": "bi-trash",
+    "color": "danger"
+  },
+  {
+    "id": "inv_1765821492.144807",
+    "type": "inventory",
+    "action": "create",
+    "inventory": "dfgdsfg",
+    "user": "admin",
+    "comment": "Создан новый инвентарь",
+    "timestamp": "2025-12-15T20:58:12.144287",
+    "display_time": "20:58",
+    "icon": "bi-plus-circle",
+    "color": "success"
+  },
+  {
+    "id": "inv_1765821469.003527",
+    "type": "inventory",
+    "action": "edit",
+    "inventory": "test_inventory",
+    "user": "admin",
+    "comment": "Изменения в инвентаре",
+    "timestamp": "2025-12-15T20:57:49.003160",
+    "display_time": "20:57",
+    "icon": "bi-pencil",
+    "color": "warning"
+  },
+  {
+    "id": "inv_1765821416.831142",
+    "type": "inventory",
+    "action": "delete",
+    "inventory": "test_inventory_copy",
+    "user": "admin",
+    "comment": "Инвентарь удален",
+    "timestamp": "2025-12-15T20:56:56.830437",
+    "display_time": "20:56",
+    "icon": "bi-trash",
+    "color": "danger"
+  }
+]

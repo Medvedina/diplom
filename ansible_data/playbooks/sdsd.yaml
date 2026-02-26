@@ -1,0 +1,48 @@
+# f
+# Created: 2026-02-26 20:29:51
+# Target: all
+
+- connection: network_cli
+  gather_facts: true
+  hosts: all
+  name: f
+  tasks:
+  - color: success
+    icon: bi-tags
+    id: 0
+    name: VLAN
+    params:
+      interfaces: gi0/1, gi0/2
+      name: VLAN45
+      state: active
+      vlan_id: '45'
+    type: vlan
+  - color: success
+    icon: bi-wifi
+    id: 2
+    name: Ping тест
+    params:
+      count: '3'
+      size: '56'
+    type: ping
+  - color: info
+    icon: bi-cloud-download
+    id: 0
+    name: Бэкап конфигурации
+    params:
+      compress: true
+      destination: ''
+      include_secrets: false
+    type: backup_config
+    when: inventory_hostname == 'switches-01'
+  - color: warning
+    icon: bi-shield
+    id: 1
+    name: RSTP
+    params:
+      bpduguard: true
+      link_type: point-to-point
+      portfast: true
+      priority: '32768'
+    type: rstp
+    when: inventory_hostname == 'switches-02'

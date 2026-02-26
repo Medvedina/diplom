@@ -1,0 +1,11 @@
+---
+- name: Test Host Connectivity
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Test ping connection
+      ping:
+    
+    - name: Display host information
+      debug:
+        msg: "Host {{ inventory_hostname }} is reachable"

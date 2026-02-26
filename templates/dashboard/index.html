@@ -1,0 +1,611 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Ansible Control Panel{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item active">Обзор</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-0">
+    <!-- Карточки статистики -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Всего хостов
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">42</div>
+                            <div class="mt-2">
+                                <span class="text-success">
+                                    <i class="bi bi-arrow-up"></i> 38 онлайн
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-pc-display fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Инвентари
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ list_inventories()|length }}</div>
+                            <div class="mt-2">
+                                <span class="text-muted">
+                                    <i class="bi bi-folder"></i> активные
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-list-check fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Задачи
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">8</div>
+                            <div class="mt-2">
+                                <span class="text-warning">
+                                    <i class="bi bi-clock"></i> 3 активные
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-clock-history fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Плейбуки
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">12</div>
+                            <div class="mt-2">
+                                <span class="text-info">
+                                    <i class="bi bi-play-circle"></i> выполнено сегодня: 2
+                                </span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-play-btn fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Графики и основные секции -->
+    <div class="row">
+        <!-- График uptime -->
+        <div class="col-xl-8 col-lg-7 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">Uptime за последние 30 дней</h6>
+                    <select class="form-select form-select-sm w-auto" onchange="updateUptimeChart(this.value)">
+                        <option value="30">30 дней</option>
+                        <option value="7">7 дней</option>
+                        <option value="1">24 часа</option>
+                    </select>
+                </div>
+                <div class="card-body">
+                    <canvas id="uptimeChart" height="250"></canvas>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Последние события -->
+        <div class="col-xl-4 col-lg-5 mb-4">
+            <div class="card shadow h-100">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="bi bi-clock-history me-2"></i>Последние события
+                        {% if recent_events %}
+                        <span class="badge bg-secondary ms-2">{{ recent_events|length }}</span>
+                        {% endif %}
+                    </h6>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="refreshEvents()" title="Обновить">
+                        <i class="bi bi-arrow-clockwise"></i>
+                    </button>
+                </div>
+                
+                <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                    {% if recent_events and recent_events|length > 0 %}
+                    <div class="list-group list-group-flush" id="recentEventsList">
+                        {% for event in recent_events %}
+                        <div class="list-group-item border-0 py-3 px-3">
+                            <div class="d-flex align-items-start">
+                                <!-- Иконка события -->
+                                <div class="flex-shrink-0 me-3">
+                                    <div class="rounded-circle bg-{{ event.color }} bg-opacity-10 p-2">
+                                        <i class="bi {{ event.icon }} text-{{ event.color }} fs-5"></i>
+                                    </div>
+                                </div>
+                                
+                                <!-- Содержимое события -->
+                                <div class="flex-grow-1">
+                                    <!-- Заголовок и бейдж -->
+                                    <div class="d-flex justify-content-between align-items-start mb-1">
+                                        <h6 class="mb-0 text-dark" style="font-size: 0.95rem; font-weight: 600;">
+                                            {{ event.title }}
+                                        </h6>
+                                        <span class="badge bg-{{ event.color }} text-white ms-2" style="font-size: 0.7rem;">
+                                            {{ event.badge }}
+                                        </span>
+                                    </div>
+                                    
+                                    <!-- Описание -->
+                                    <p class="mb-2 text-muted" style="font-size: 0.85rem; line-height: 1.4;">
+                                        {{ event.description }}
+                                    </p>
+                                    
+                                    <!-- Мета-информация -->
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small class="text-muted" style="font-size: 0.75rem;">
+                                            <i class="bi bi-person me-1"></i>
+                                            <span class="fw-medium">{{ event.user }}</span>
+                                        </small>
+                                        <small class="text-muted" style="font-size: 0.75rem;">
+                                            <i class="bi bi-clock me-1"></i>
+                                            {{ event.time }}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Разделитель (кроме последнего элемента) -->
+                        {% if not loop.last %}
+                        <hr class="my-0 mx-3" style="opacity: 0.3;">
+                        {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <!-- Состояние "нет событий" -->
+                    <div class="text-center py-5">
+                        <div class="mb-3">
+                            <i class="bi bi-inbox display-1 text-muted"></i>
+                        </div>
+                        <h5 class="text-muted mb-2">Событий пока нет</h5>
+                        <p class="text-muted small mb-4">Создайте первый инвентарь для появления событий</p>
+                        <a href="{{ url_for('inventory.inventory_list') }}" 
+                           class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-plus-circle me-1"></i>Создать инвентарь
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <!-- Футер карточки -->
+                <div class="card-footer bg-white border-top-0 pt-0">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Обновляется автоматически
+                        </small>
+                        <button class="btn btn-sm btn-outline-primary" onclick="showAllEvents()">
+                            <i class="bi bi-list me-1"></i>Все события
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Статус инвентарей -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header bg-white py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Статус инвентарей</h6>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Инвентарь</th>
+                                    <th>Хостов</th>
+                                    <th>Групп</th>
+                                    <th>Статус</th>
+                                    <th>Последнее изменение</th>
+                                    <th>Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for inventory in list_inventories() %}
+                                <tr>
+                                    <td>
+                                        <i class="bi bi-folder text-info me-2"></i>
+                                        <strong>{{ inventory.name }}</strong>
+                                    </td>
+                                    <td>
+                                        {% set inv_data = load_inventory(inventory.name) %}
+                                        {% if inv_data %}
+                                            {% set host_count = 0 %}
+                                            {% for group in inv_data.all.children.values() %}
+                                                {% if group.hosts %}
+                                                    {% set host_count = host_count + group.hosts|length %}
+                                                {% endif %}
+                                            {% endfor %}
+                                            <span class="badge bg-secondary">{{ host_count }}</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if inv_data %}
+                                            <span class="badge bg-info">{{ inv_data.all.children|length }}</span>
+                                        {% else %}
+                                            <span class="badge bg-info">0</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle me-1"></i> Активен
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <small class="text-muted">{{ inventory.modified }}</small>
+                                    </td>
+                                    <td>
+                                        <a href="{{ url_for('inventory.inventory_detail', inventory_name=inventory.name) }}" 
+                                           class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        <button class="btn btn-sm btn-outline-warning">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Инициализация графика uptime
+let uptimeChart;
+function initUptimeChart() {
+    const ctx = document.getElementById('uptimeChart').getContext('2d');
+    
+    // Демо данные
+    const days = 30;
+    const labels = [];
+    const data = [];
+    
+    for (let i = days; i > 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        labels.push(date.toLocaleDateString('ru-RU', { month: 'short', day: 'numeric' }));
+        data.push(95 + Math.random() * 5); // 95-100%
+    }
+    
+    uptimeChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Uptime %',
+                data: data,
+                borderColor: '#4e73df',
+                backgroundColor: 'rgba(78, 115, 223, 0.05)',
+                pointBackgroundColor: '#4e73df',
+                pointBorderColor: '#fff',
+                pointRadius: 3,
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `Uptime: ${context.raw.toFixed(2)}%`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    min: 90,
+                    max: 100,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function updateUptimeChart(days) {
+    // Обновление данных графика
+    // Реализация через AJAX запрос к API
+    fetch(`/reports/api/uptime-stats?days=${days}`)
+        .then(response => response.json())
+        .then(data => {
+            // Обновление графика
+        });
+}
+
+// Обновление событий через AJAX
+function refreshEvents() {
+    const refreshBtn = document.querySelector('.card-header .btn-outline-secondary i');
+    if (refreshBtn) refreshBtn.classList.add('rotate');
+    
+    fetch('/dashboard/api/recent-events?limit=10')
+        .then(response => {
+            if (!response.ok) throw new Error('Network response was not ok');
+            return response.json();
+        })
+        .then(data => {
+            if (data.success && data.events) {
+                updateEventsList(data.events);
+                showNotification('События обновлены', 'success');
+            } else {
+                showNotification('Нет новых событий', 'info');
+            }
+            if (refreshBtn) refreshBtn.classList.remove('rotate');
+        })
+        .catch(error => {
+            console.error('Error refreshing events:', error);
+            showNotification('Ошибка обновления', 'error');
+            if (refreshBtn) refreshBtn.classList.remove('rotate');
+        });
+}
+
+// Обновление списка событий
+function updateEventsList(events) {
+    const container = document.getElementById('recentEventsList');
+    if (!container) return;
+    
+    if (!events || events.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <div class="mb-3">
+                    <i class="bi bi-inbox display-1 text-muted"></i>
+                </div>
+                <h5 class="text-muted mb-2">Событий пока нет</h5>
+                <p class="text-muted small mb-4">Создайте первый инвентарь для появления событий</p>
+                <a href="/inventory" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-plus-circle me-1"></i>Создать инвентарь
+                </a>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    
+    events.forEach((event, index) => {
+        html += `
+            <div class="list-group-item border-0 py-3 px-3">
+                <div class="d-flex align-items-start">
+                    <div class="flex-shrink-0 me-3">
+                        <div class="rounded-circle bg-${event.color} bg-opacity-10 p-2">
+                            <i class="bi ${event.icon} text-${event.color} fs-5"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="flex-grow-1">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <h6 class="mb-0 text-dark" style="font-size: 0.95rem; font-weight: 600;">
+                                ${event.title}
+                            </h6>
+                            <span class="badge bg-${event.color} text-white ms-2" style="font-size: 0.7rem;">
+                                ${event.badge}
+                            </span>
+                        </div>
+                        
+                        <p class="mb-2 text-muted" style="font-size: 0.85rem; line-height: 1.4;">
+                            ${event.description}
+                        </p>
+                        
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted" style="font-size: 0.75rem;">
+                                <i class="bi bi-person me-1"></i>
+                                <span class="fw-medium">${event.user}</span>
+                            </small>
+                            <small class="text-muted" style="font-size: 0.75rem;">
+                                <i class="bi bi-clock me-1"></i>
+                                ${event.time}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        if (index < events.length - 1) {
+            html += '<hr class="my-0 mx-3" style="opacity: 0.3;">';
+        }
+    });
+    
+    container.innerHTML = html;
+    
+    // Анимация появления новых событий
+    animateNewEvents();
+}
+
+// Показать все события
+function showAllEvents() {
+    // Временное решение - перейти на отдельную страницу истории
+    window.location.href = '/inventory/history';
+}
+
+// Анимация новых событий
+function animateNewEvents() {
+    const items = document.querySelectorAll('.list-group-item');
+    items.forEach((item, index) => {
+        item.style.animationDelay = `${index * 0.1}s`;
+        item.classList.add('fade-in');
+    });
+}
+
+// Показать уведомление
+function showNotification(message, type) {
+    const notification = document.createElement('div');
+    notification.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    notification.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="bi ${type === 'success' ? 'bi-check-circle' : 
+                         type === 'error' ? 'bi-x-circle' : 
+                         'bi-info-circle'} me-2"></i>
+            <div>${message}</div>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    setTimeout(() => {
+        if (notification.parentElement) notification.remove();
+    }, 3000);
+}
+
+// Инициализация при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    initUptimeChart();
+    
+    // Проверяем и выводим события в консоль
+    const events = {{ recent_events|tojson|safe }};
+    console.log('Dashboard loaded with events:', events);
+    
+    if (events && events.length > 0) {
+        console.log(`✓ Загружено ${events.length} событий:`);
+        events.forEach((event, i) => {
+            console.log(`  ${i+1}. ${event.title} (${event.time})`);
+        });
+    } else {
+        console.log('⚠ Нет событий для отображения');
+    }
+    
+    // Анимация загрузки
+    setTimeout(() => {
+        animateNewEvents();
+    }, 100);
+    
+    // Автообновление статистики каждые 30 секунд
+    setInterval(() => {
+        fetch('/dashboard/api/system-stats')
+            .then(response => response.json())
+            .then(data => {
+                console.log('Dashboard stats updated');
+            });
+    }, 30000);
+    
+    // Автообновление событий каждые 30 секунд
+    setInterval(refreshEvents, 30000);
+});
+</script>
+
+<style>
+/* Анимации для событий */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Анимация вращения иконки обновления */
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.rotate {
+    animation: rotate 0.5s linear infinite;
+}
+
+/* Стили для карточки событий */
+.card-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.card-body::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+.card-body::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 3px;
+}
+
+.card-body::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* Эффекты при наведении */
+.list-group-item:hover {
+    background-color: rgba(0, 123, 255, 0.03);
+    transition: background-color 0.2s;
+}
+
+/* Цвета для бейджей */
+.bg-success { background-color: #28a745 !important; }
+.bg-warning { background-color: #ffc107 !important; }
+.bg-danger { background-color: #dc3545 !important; }
+.bg-info { background-color: #17a2b8 !important; }
+.bg-primary { background-color: #007bff !important; }
+.bg-secondary { background-color: #6c757d !important; }
+
+/* Прозрачные фоны для иконок */
+.bg-success.bg-opacity-10 { background-color: rgba(40, 167, 69, 0.1) !important; }
+.bg-warning.bg-opacity-10 { background-color: rgba(255, 193, 7, 0.1) !important; }
+.bg-danger.bg-opacity-10 { background-color: rgba(220, 53, 69, 0.1) !important; }
+.bg-info.bg-opacity-10 { background-color: rgba(23, 162, 184, 0.1) !important; }
+.bg-primary.bg-opacity-10 { background-color: rgba(0, 123, 255, 0.1) !important; }
+.bg-secondary.bg-opacity-10 { background-color: rgba(108, 117, 125, 0.1) !important; }
+</style>
+{% endblock %}

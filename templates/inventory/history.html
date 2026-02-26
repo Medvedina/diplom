@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+{% block title %}История изменений {{ inventory_name }} - Ansible Control Panel{% endblock %}
+
+{% block breadcrumbs %}
+    <li class="breadcrumb-item">
+        <a href="{{ url_for('inventory.inventory_list') }}">Инвентари</a>
+    </li>
+    <li class="breadcrumb-item">
+        <a href="{{ url_for('inventory.inventory_detail', inventory_name=inventory_name) }}">{{ inventory_name }}</a>
+    </li>
+    <li class="breadcrumb-item active">История изменений</li>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="bi bi-clock-history me-2"></i>История изменений
+            </h1>
+            <p class="text-muted mb-0">
+                {{ inventory_name }} · Все изменения инвентаря
+            </p>
+        </div>
+        <div>
+            <a href="{{ url_for('inventory.inventory_detail', inventory_name=inventory_name) }}" 
+               class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i>Назад к инвентарю
+            </a>
+        </div>
+    </div>
+
+    <div class="card shadow">
+        <div class="card-body">
+            <div class="timeline" id="historyTimeline">
+                <!-- История будет загружена динамически -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    loadHistory();
+});
+
+function loadHistory() {
+    fetch(`/inventory/api/history/{{ inventory_name }}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.history) {
+                renderHistory(data.history);
+            } else {
+                document.getElementById('historyTimeline').innerHTML = `
+                    <div class="text-center py-5">
+                        <i class="bi bi-clock display-1 text-muted mb-3"></i>
+                        <h4 class="text-muted">История изменений не найдена</h4>
+                        <p class="text-muted">Для этого инвентаря еще нет записей об изменениях</p>
+                    </div>
+                `;
+            }
+        });
+}
+
+function renderHistory(history) {
+    const container = document.getElementById('historyTimeline');
+    
+    if (history.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-5">
+                <i class="bi bi-clock display-1 text-muted mb-3"></i>
+                <h4 class="text-muted">История изменений не найдена</h4>
+                <p class="text-muted">Для этого инвентаря еще нет записей об изменениях</p>
+            </div>
+        `;
+        return;
+    }
+    
+    let html = '';
+    
+    history.forEach((entry, index) => {
+        const date = new Date(entry.timestamp);
+        const icon = getActionIcon(entry.action);
+        const color = getActionColor(entry.action);
+        const badge = getActionBadge(entry.action);
+        
+        html += `
+            <div class="timeline-item ${index === 0 ? 'timeline-item-first' : ''}">
+                <div class="timeline-marker bg-${color}">
+                    <i class="bi ${icon} text-white"></i>
+                </div>
+                <div class="timeline-content">
+                    <div class="timeline-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">${getActionTitle(entry.action, entry.inventory)}</h6>
+                            <span class="badge bg-${color}">${badge}</span>
+                        </div>
+                        <small class="text-muted">
+                            ${date.toLocaleString('ru-RU')} · 
+                            <i class="bi bi-person me-1"></i>${entry.user || 'admin'}
+                        </small>
+                    </div>
+                    <div class="timeline-body mt-2">
+                        <p>${entry.comment || 'Без комментария'}</p>
+                        ${renderChanges(entry.changes)}
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    container.innerHTML = html;
+}
+
+function getActionIcon(action) {
+    const icons = {
+        'create': 'bi-plus-circle',
+        'edit': 'bi-pencil',
+        'delete': 'bi-trash',
+        'clone': 'bi-copy',
+        'export': 'bi-download',
+        'import': 'bi-upload',
+        'validate': 'bi-check-circle'
+    };
+    return icons[action] || 'bi-file-earmark';
+}
+
+function getActionColor(action) {
+    const colors = {
+        'create': 'success',
+        'edit': 'warning',
+        'delete': 'danger',
+        'clone': 'info',
+        'export': 'primary',
+        'import': 'secondary',
+        'validate': 'success'
+    };
+    return colors[action] || 'secondary';
+}
+
+function getActionBadge(action) {
+    const badges = {
+        'create': 'Создание',
+        'edit': 'Изменение',
+        'delete': 'Удаление',
+        'clone': 'Клонирование',
+        'export': 'Экспорт',
+        'import': 'Импорт',
+        'validate': 'Проверка'
+    };
+    return badges[action] || 'Действие';
+}
+
+function getActionTitle(action, inventory) {
+    const titles = {
+        'create': `Создан инвентарь: ${inventory}`,
+        'edit': `Изменен инвентарь: ${inventory}`,
+        'delete': `Удален инвентарь: ${inventory}`,
+        'clone': `Клонирован инвентарь: ${inventory}`,
+        'export': `Экспортирован инвентарь: ${inventory}`,
+        'import': `Импортирован инвентарь: ${inventory}`,
+        'validate': `Проверен инвентарь: ${inventory}`
+    };
+    return titles[action] || `Действие с инвентарем: ${inventory}`;
+}
+
+function renderChanges(changes) {
+    if (!changes || Object.keys(changes).length === 0) {
+        return '';
+    }
+    
+    let html = '<div class="mt-3"><h6 class="small text-muted mb-2">Изменения:</h6>';
+    
+    if (changes.added_hosts && changes.added_hosts.length > 0) {
+        html += `<div class="mb-2">
+            <span class="badge bg-success me-2">+${changes.added_hosts.length}</span>
+            <small>Добавлено хостов</small>
+        </div>`;
+    }
+    
+    if (changes.removed_hosts && changes.removed_hosts.length > 0) {
+        html += `<div class="mb-2">
+            <span class="badge bg-danger me-2">-${changes.removed_hosts.length}</span>
+            <small>Удалено хостов</small>
+        </div>`;
+    }
+    
+    if (changes.modified_hosts && changes.modified_hosts.length > 0) {
+        html += `<div class="mb-2">
+            <span class="badge bg-warning me-2">${changes.modified_hosts.length}</span>
+            <small>Изменено хостов</small>
+        </div>`;
+    }
+    
+    html += '</div>';
+    return html;
+}
+</script>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 40px;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 19px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: #e9ecef;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 2rem;
+}
+
+.timeline-item-first {
+    margin-top: 1rem;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -40px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+}
+
+.timeline-content {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0,0,0,0.075);
+}
+
+.timeline-header {
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.timeline-body {
+    font-size: 0.9rem;
+}
+</style>
+{% endblock %}

@@ -1,0 +1,48 @@
+# 
+# Created: 2026-02-26 20:36:00
+# Target: all
+
+- connection: network_cli
+  gather_facts: true
+  hosts: all
+  name: 'Playbook: test'
+  tasks:
+  - color: success
+    icon: bi-wifi
+    id: 0
+    name: Ping тест
+    params:
+      count: '3'
+      size: '56'
+    type: ping
+  - color: success
+    icon: bi-tags
+    id: 2
+    name: VLAN
+    params:
+      interfaces: Gi0/2, Gi0/3
+      name: VLAN2
+      state: active
+      vlan_id: '2'
+    type: vlan
+  - color: info
+    icon: bi-cloud-download
+    id: 1
+    name: Бэкап конфигурации
+    params:
+      compress: false
+      destination: ''
+      include_secrets: false
+    type: backup_config
+    when: inventory_hostname == 'app2-01'
+  - color: danger
+    icon: bi-shield-shaded
+    id: 3
+    name: STP
+    params:
+      mode: pvst
+      priority: '32768'
+      root_primary: false
+      vlan: '2'
+    type: stp
+    when: inventory_hostname == 'app2-01'
