@@ -1,26 +1,527 @@
 {% extends "base.html" %}
 
-{% block title %}Отчёты - Ansible Control Panel{% endblock %}
+{% block title %}Отчеты - Ansible Control Panel{% endblock %}
 
 {% block breadcrumbs %}
-    <li class="breadcrumb-item active">Отчёты и аналитика</li>
+    <li class="breadcrumb-item active">Результаты выполнения плейбуков</li>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <div class="row">
-        <div class="col-12">
-            <div class="card shadow mb-4">
-                <div class="card-header bg-white py-3">
-                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Аналитика системы</h5>
+    <!-- Заголовок -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="bi bi-bar-chart me-2"></i>Отчеты о выполнении
+            </h1>
+            <p class="text-muted mb-0">История запусков плейбуков и результаты</p>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-outline-secondary" onclick="refreshResults()">
+                <i class="bi bi-arrow-clockwise"></i> Обновить
+            </button>
+            <button class="btn btn-outline-danger" onclick="clearAllResults()">
+                <i class="bi bi-trash"></i> Очистить историю
+            </button>
+        </div>
+    </div>
+
+    <!-- Статистика -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Всего запусков
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="total-runs">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-play-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body text-center">
-                    <h3 class="text-muted">Раздел в разработке</h3>
-                    <p class="lead">Здесь будут графики и отчёты о работе системы</p>
-                    <i class="bi bi-bar-chart display-1 text-secondary"></i>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Успешных
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="successful-runs">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                С ошибками
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800" id="failed-runs">0</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-x-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Последний запуск
+                            </div>
+                            <div class="h6 mb-0 font-weight-bold text-gray-800" id="last-run">—</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="bi bi-clock-history fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Таблица результатов -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="bi bi-table me-2"></i>История запусков
+            </h6>
+            <div class="input-group w-auto">
+                <input type="text" class="form-control form-control-sm" 
+                       placeholder="Поиск..." id="searchResults"
+                       onkeyup="filterResults()">
+                <button class="btn btn-outline-secondary btn-sm" type="button">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover" id="resultsTable">
+                    <thead class="thead-light">
+                        <tr>
+                            <th>Время</th>
+                            <th>Плейбук</th>
+                            <th>Инвентарь</th>
+                            <th>Статус</th>
+                            <th>OK</th>
+                            <th>Changed</th>
+                            <th>Failed</th>
+                            <th>Unreachable</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsBody">
+                        <tr>
+                            <td colspan="9" class="text-center py-5">
+                                <div class="spinner-border text-primary" role="status">
+                                    <span class="visually-hidden">Загрузка...</span>
+                                </div>
+                                <p class="mt-2 text-muted">Загрузка результатов...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
+
+<!-- Модальное окно просмотра результата -->
+<div class="modal fade" id="resultModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-file-text me-2"></i>Детали выполнения
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="resultModalBody">
+                <!-- Заполняется динамически -->
+            </div>
+            <div class="modal-footer">
+                <div class="btn-group me-auto">
+                    <button class="btn btn-outline-success" onclick="exportResult('json')">
+                        <i class="bi bi-filetype-json"></i> JSON
+                    </button>
+                    <button class="btn btn-outline-info" onclick="exportResult('csv')">
+                        <i class="bi bi-filetype-csv"></i> CSV
+                    </button>
+                    <button class="btn btn-outline-primary" onclick="exportResult('xlsx')">
+                        <i class="bi bi-file-earmark-excel"></i> Excel
+                    </button>
+                </div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentResultId = null;
+
+// Загрузка результатов при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    loadResults();
+    // Автообновление каждые 30 секунд
+    setInterval(loadResults, 30000);
+});
+
+// Загрузка результатов
+function loadResults() {
+    fetch('/reports/api/results')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayResults(data.results);
+                updateStats(data.results);
+            } else {
+                showAlert('Ошибка загрузки: ' + data.message, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error loading results:', error);
+            showAlert('Ошибка загрузки результатов', 'error');
+        });
+}
+
+// Отображение результатов в таблице
+function displayResults(results) {
+    const tbody = document.getElementById('resultsBody');
+    
+    if (!results || results.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="text-center py-5">
+                    <i class="bi bi-inbox display-1 text-muted mb-3"></i>
+                    <h5 class="text-muted">Нет результатов</h5>
+                    <p class="text-muted">Запустите плейбук, чтобы увидеть результаты</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    let html = '';
+    results.forEach(result => {
+        const statusClass = result.status === 'success' ? 'success' : 'danger';
+        const statusIcon = result.status === 'success' ? 'bi-check-circle' : 'bi-x-circle';
+        
+        html += `
+            <tr class="result-row" data-result-id="${result.id}">
+                <td>
+                    <small class="text-muted">${result.timestamp}</small>
+                </td>
+                <td>
+                    <strong>${result.playbook}</strong>
+                </td>
+                <td>
+                    <span class="badge bg-info">${result.inventory}</span>
+                </td>
+                <td>
+                    <span class="badge bg-${statusClass}">
+                        <i class="bi ${statusIcon} me-1"></i>
+                        ${result.status === 'success' ? 'Успешно' : 'Ошибка'}
+                    </span>
+                </td>
+                <td>
+                    <span class="badge bg-success">${result.summary.ok || 0}</span>
+                </td>
+                <td>
+                    <span class="badge bg-warning">${result.summary.changed || 0}</span>
+                </td>
+                <td>
+                    <span class="badge bg-danger">${result.summary.failed || 0}</span>
+                </td>
+                <td>
+                    <span class="badge bg-secondary">${result.summary.unreachable || 0}</span>
+                </td>
+                <td>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary" title="Просмотр"
+                                onclick="viewResult('${result.id}')">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                        <button class="btn btn-outline-success" title="Экспорт"
+                                onclick="exportResult('${result.id}', 'json')">
+                            <i class="bi bi-download"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" title="Удалить"
+                                onclick="deleteResult('${result.id}')">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    });
+    
+    tbody.innerHTML = html;
+}
+
+// Обновление статистики
+function updateStats(results) {
+    const total = results.length;
+    const successful = results.filter(r => r.status === 'success').length;
+    const failed = results.filter(r => r.status === 'failed').length;
+    const lastRun = results.length > 0 ? results[0].timestamp : '—';
+    
+    document.getElementById('total-runs').textContent = total;
+    document.getElementById('successful-runs').textContent = successful;
+    document.getElementById('failed-runs').textContent = failed;
+    document.getElementById('last-run').textContent = lastRun;
+}
+
+// Фильтрация результатов
+function filterResults() {
+    const searchText = document.getElementById('searchResults').value.toLowerCase();
+    const rows = document.querySelectorAll('#resultsBody .result-row');
+    
+    rows.forEach(row => {
+        const text = row.textContent.toLowerCase();
+        if (text.includes(searchText)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// Просмотр результата
+function viewResult(resultId) {
+    currentResultId = resultId;
+    
+    fetch(`/reports/api/result/${resultId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayResultDetails(data.result);
+                const modal = new bootstrap.Modal(document.getElementById('resultModal'));
+                modal.show();
+            } else {
+                showAlert('Ошибка загрузки: ' + data.message, 'error');
+            }
+        });
+}
+
+// Отображение деталей результата
+function displayResultDetails(result) {
+    const modalBody = document.getElementById('resultModalBody');
+    
+    let hostsHtml = '';
+    result.hosts.forEach(host => {
+        const status = host.failed > 0 ? 'danger' : (host.changed > 0 ? 'warning' : 'success');
+        hostsHtml += `
+            <tr>
+                <td><strong>${host.host}</strong></td>
+                <td><span class="badge bg-${status}">${host.failed > 0 ? 'Failed' : (host.changed > 0 ? 'Changed' : 'OK')}</span></td>
+                <td>${host.ok}</td>
+                <td>${host.changed}</td>
+                <td>${host.failed}</td>
+                <td>${host.unreachable}</td>
+                <td>${host.skipped}</td>
+            </tr>
+        `;
+    });
+    
+    modalBody.innerHTML = `
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body py-2">
+                        <small>Плейбук</small>
+                        <h6>${result.playbook}</h6>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body py-2">
+                        <small>Инвентарь</small>
+                        <h6>${result.inventory}</h6>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card ${result.status === 'success' ? 'bg-success' : 'bg-danger'} text-white">
+                    <div class="card-body py-2">
+                        <small>Статус</small>
+                        <h6>${result.status === 'success' ? 'Успешно' : 'Ошибка'}</h6>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-secondary text-white">
+                    <div class="card-body py-2">
+                        <small>Время</small>
+                        <h6>${new Date(result.timestamp).toLocaleString()}</h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <h6 class="mb-3">Результаты по хостам:</h6>
+        <div class="table-responsive mb-3">
+            <table class="table table-sm table-bordered">
+                <thead class="table-light">
+                    <tr>
+                        <th>Хост</th>
+                        <th>Статус</th>
+                        <th>OK</th>
+                        <th>Changed</th>
+                        <th>Failed</th>
+                        <th>Unreachable</th>
+                        <th>Skipped</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${hostsHtml}
+                </tbody>
+            </table>
+        </div>
+        
+        <h6 class="mb-3">Вывод выполнения:</h6>
+        <pre class="bg-dark text-light p-3 rounded" style="max-height: 300px; overflow-y: auto;"><code>${result.output || 'Нет вывода'}</code></pre>
+    `;
+}
+
+// Экспорт результата
+function exportResult(resultId = null, format) {
+    const id = resultId || currentResultId;
+    if (!id) {
+        showAlert('Не выбран результат для экспорта', 'warning');
+        return;
+    }
+    
+    window.open(`/reports/api/export/${id}?format=${format}`, '_blank');
+}
+
+// Удаление результата
+function deleteResult(resultId) {
+    if (!confirm('Удалить этот результат?')) return;
+    
+    fetch(`/reports/api/delete/${resultId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Результат удален', 'success');
+            loadResults();
+        } else {
+            showAlert('Ошибка: ' + data.message, 'error');
+        }
+    });
+}
+
+// Обновление результатов
+function refreshResults() {
+    loadResults();
+}
+
+// Очистка всей истории
+function clearAllResults() {
+    if (!confirm('Удалить все результаты? Это действие нельзя отменить.')) return;
+    
+    fetch('/reports/api/clear-all', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('Все результаты удалены', 'success');
+            loadResults();
+        } else {
+            showAlert('Ошибка: ' + data.message, 'error');
+        }
+    });
+}
+
+// Уведомления
+function showAlert(message, type) {
+    const typeMap = {
+        'success': 'success',
+        'error': 'danger',
+        'warning': 'warning',
+        'info': 'info'
+    };
+    
+    const bootstrapType = typeMap[type] || 'info';
+    
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${bootstrapType} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px;';
+    
+    const icon = type === 'success' ? 'bi-check-circle' : 
+                type === 'error' ? 'bi-x-circle' : 
+                type === 'warning' ? 'bi-exclamation-triangle' : 'bi-info-circle';
+    
+    alertDiv.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="bi ${icon} me-2"></i>
+            <div>${message}</div>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    setTimeout(() => alertDiv.remove(), 5000);
+}
+</script>
+
+<style>
+.result-row:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+    cursor: pointer;
+}
+
+.border-left-primary {
+    border-left: 4px solid #007bff;
+}
+
+.border-left-success {
+    border-left: 4px solid #28a745;
+}
+
+.border-left-danger {
+    border-left: 4px solid #dc3545;
+}
+
+.border-left-info {
+    border-left: 4px solid #17a2b8;
+}
+
+#resultsTable td {
+    vertical-align: middle;
+}
+
+pre code {
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+</style>
 {% endblock %}

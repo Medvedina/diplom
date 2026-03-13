@@ -40,6 +40,70 @@
 
             <div id="executionOutput" style="display: none;">
                 <h6 class="mb-3">Результат выполнения:</h6>
+                
+                <!-- Сводка по хостам -->
+                <div class="row mb-3" id="summaryStats" style="display: none;">
+                    <div class="col-md-2 col-6 mb-2">
+                        <div class="card bg-success text-white text-center">
+                            <div class="card-body py-2">
+                                <small>OK</small>
+                                <h5 id="summary-ok">0</h5>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-6 mb-2">
+                        <div class="card bg-warning text-white text-center">
+                            <div class="card-body py-2">
+                                <small>Changed</small>
+                                <h5 id="summary-changed">0</h5>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-6 mb-2">
+                        <div class="card bg-danger text-white text-center">
+                            <div class="card-body py-2">
+                                <small>Failed</small>
+                                <h5 id="summary-failed">0</h5>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-6 mb-2">
+                        <div class="card bg-secondary text-white text-center">
+                            <div class="card-body py-2">
+                                <small>Unreachable</small>
+                                <h5 id="summary-unreachable">0</h5>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-2 col-6 mb-2">
+                        <div class="card bg-info text-white text-center">
+                            <div class="card-body py-2">
+                                <small>Skipped</small>
+                                <h5 id="summary-skipped">0</h5>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Таблица результатов по хостам -->
+                <div class="table-responsive mb-3">
+                    <table class="table table-dark table-sm" id="hostsTable" style="display: none;">
+                        <thead>
+                            <tr>
+                                <th>Хост</th>
+                                <th>OK</th>
+                                <th>Changed</th>
+                                <th>Failed</th>
+                                <th>Unreachable</th>
+                                <th>Skipped</th>
+                            </tr>
+                        </thead>
+                        <tbody id="hostsBody">
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- Полный вывод -->
                 <div class="execution-output p-3 bg-dark text-light rounded" style="font-family: monospace; max-height: 400px; overflow-y: auto;">
                     <div id="outputContent"></div>
                 </div>
@@ -53,15 +117,25 @@ function runPlaybook() {
     const inventory = document.getElementById('inventorySelect').value;
     
     if (!inventory) {
-        alert('Выберите инвентарь');
+        showAlert('Выберите инвентарь', 'warning');
         return;
     }
     
     const outputDiv = document.getElementById('executionOutput');
     const outputContent = document.getElementById('outputContent');
+    const summaryStats = document.getElementById('summaryStats');
+    const hostsTable = document.getElementById('hostsTable');
+    const hostsBody = document.getElementById('hostsBody');
     
     outputDiv.style.display = 'block';
+    summaryStats.style.display = 'none';
+    hostsTable.style.display = 'none';
     outputContent.innerHTML = '<i class="bi bi-hourglass-split"></i> Запуск плейбука...';
+    
+    const runBtn = event.target;
+    const originalText = runBtn.innerHTML;
+    runBtn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i>Запуск...';
+    runBtn.disabled = true;
     
     fetch('/playbooks/api/run-playbook', {
         method: 'POST',
@@ -71,45 +145,117 @@ function runPlaybook() {
             inventory: inventory
         })
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
-        let html = '<div class="mb-3">';
-        html += `<span class="text-success">✓ Playbook execution completed</span><br>`;
-        html += `Target: ${inventory}<br>`;
-        html += `Timestamp: ${new Date(data.timestamp * 1000).toLocaleString()}<br>`;
-        html += '</div>';
+        runBtn.innerHTML = originalText;
+        runBtn.disabled = false;
         
-        if (data.results) {
-            html += '<table class="table table-dark table-sm">';
-            html += '<tr><th>Host</th><th>Status</th><th>Changed</th><th>Output</th></tr>';
+        if (data.success) {
+            showAlert('Плейбук успешно выполнен', 'success');
             
-            data.results.forEach(r => {
-                html += `<tr>`;
-                html += `<td>${r.host}</td>`;
-                html += `<td><span class="badge ${r.success ? 'bg-success' : 'bg-danger'}">${r.success ? 'OK' : 'FAILED'}</span></td>`;
-                html += `<td>${r.changed ? '✓' : '✗'}</td>`;
-                html += `<td>${r.output}</td>`;
-                html += `</tr>`;
-            });
-            
-            html += '</table>';
-            
+            // Отображаем сводку
             if (data.summary) {
-                html += `<div class="mt-3">
-                    <span class="badge bg-success">OK: ${data.summary.ok}</span>
-                    <span class="badge bg-danger">Failed: ${data.summary.failed}</span>
-                    <span class="badge bg-warning">Changed: ${data.summary.changed}</span>
-                </div>`;
+                summaryStats.style.display = 'flex';
+                document.getElementById('summary-ok').textContent = data.summary.ok || 0;
+                document.getElementById('summary-changed').textContent = data.summary.changed || 0;
+                document.getElementById('summary-failed').textContent = data.summary.failed || 0;
+                document.getElementById('summary-unreachable').textContent = data.summary.unreachable || 0;
+                document.getElementById('summary-skipped').textContent = data.summary.skipped || 0;
+            }
+            
+            // Отображаем результаты по хостам
+            if (data.hosts && data.hosts.length > 0) {
+                hostsTable.style.display = 'table';
+                let html = '';
+                data.hosts.forEach(host => {
+                    html += `<tr>
+                        <td><strong>${host.host}</strong></td>
+                        <td>${host.ok || 0}</td>
+                        <td>${host.changed || 0}</td>
+                        <td>${host.failed || 0}</td>
+                        <td>${host.unreachable || 0}</td>
+                        <td>${host.skipped || 0}</td>
+                    </tr>`;
+                });
+                hostsBody.innerHTML = html;
+            }
+            
+            // Отображаем вывод
+            let outputHtml = '<div class="mb-3">';
+            outputHtml += `<span class="text-success">✓ Playbook execution completed</span><br>`;
+            outputHtml += `Target: ${inventory}<br>`;
+            outputHtml += `Timestamp: ${new Date(data.timestamp).toLocaleString()}<br>`;
+            outputHtml += `Result ID: ${data.result_id}<br>`;
+            outputHtml += '</div>';
+            
+            if (data.output) {
+                outputHtml += '<pre class="mt-3">' + data.output + '</pre>';
+            }
+            
+            outputContent.innerHTML = outputHtml;
+            
+        } else {
+            showAlert('Ошибка выполнения: ' + (data.message || 'Неизвестная ошибка'), 'error');
+            if (data.output || data.error) {
+                outputContent.innerHTML = `<pre class="text-danger">${data.error || data.output}</pre>`;
             }
         }
-        
-        outputContent.innerHTML = html;
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('Ошибка сети: ' + error.message, 'error');
+        runBtn.innerHTML = originalText;
+        runBtn.disabled = false;
     });
 }
 
 function showPreview() {
-    // Заглушка для предпросмотра
-    alert('Функция предпросмотра будет добавлена позже');
+    const inventory = document.getElementById('inventorySelect').value;
+    if (!inventory) {
+        showAlert('Выберите инвентарь', 'warning');
+        return;
+    }
+    
+    // Формируем команду для предпросмотра
+    const cmd = `ansible-playbook -i ${inventory} {{ playbook_name }} -u admin -v --check`;
+    showAlert(`Команда для проверки:\n${cmd}`, 'info', 10000);
+}
+
+function showAlert(message, type, timeout = 5000) {
+    const typeMap = {
+        'success': 'success',
+        'error': 'danger',
+        'warning': 'warning',
+        'info': 'info'
+    };
+    
+    const bootstrapType = typeMap[type] || 'info';
+    
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${bootstrapType} alert-dismissible fade show position-fixed`;
+    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 1050; min-width: 300px; white-space: pre-line;';
+    
+    const icon = type === 'success' ? 'bi-check-circle' : 
+                type === 'error' ? 'bi-x-circle' : 
+                type === 'warning' ? 'bi-exclamation-triangle' : 'bi-info-circle';
+    
+    alertDiv.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="bi ${icon} me-2"></i>
+            <div>${message}</div>
+            <button type="button" class="btn-close ms-auto" onclick="this.parentElement.parentElement.remove()"></button>
+        </div>
+    `;
+    
+    document.body.appendChild(alertDiv);
+    setTimeout(() => {
+        if (alertDiv.parentElement) alertDiv.remove();
+    }, timeout);
 }
 </script>
 {% endblock %}

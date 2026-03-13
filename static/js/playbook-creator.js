@@ -819,6 +819,7 @@ function createTaskPreview(task) {
 }
 
 // Функция для парсинга задач из плейбука
+// Функция для парсинга задач из плейбука
 function parsePlaybookTasks(tasksData) {
     if (!tasksData || !Array.isArray(tasksData)) {
         console.log('Нет задач для парсинга');
@@ -826,20 +827,12 @@ function parsePlaybookTasks(tasksData) {
     }
     
     console.log('Парсинг задач из плейбука...');
-    console.log('Исходные задачи:', tasksData);
+    
+    // Очищаем текущие задачи
+    tasks = [];
+    hostTasks = {};
     
     tasksData.forEach((task, index) => {
-        console.log(`Обработка задачи ${index + 1}:`, task);
-        
-        // Проверяем, есть ли условие для конкретного хоста
-        let targetHost = null;
-        if (task.when && typeof task.when === 'string' && task.when.includes('inventory_hostname')) {
-            const match = task.when.match(/inventory_hostname == '([^']+)'/);
-            if (match) {
-                targetHost = match[1];
-            }
-        }
-        
         // Определяем тип задачи по модулю
         let taskType = null;
         let taskParams = {};
@@ -848,7 +841,6 @@ function parsePlaybookTasks(tasksData) {
         if (task.ping) {
             taskType = 'ping';
             taskParams = task.ping || {};
-            console.log('  Тип: ping');
         } else if (task.ios_config) {
             const lines = task.ios_config.lines || [];
             const joinedLines = lines.join(' ');
@@ -856,23 +848,15 @@ function parsePlaybookTasks(tasksData) {
             if (joinedLines.includes('router ospf')) {
                 taskType = 'ospf';
                 taskParams = parseOspfParams(lines);
-                console.log('  Тип: ospf');
             } else if (joinedLines.includes('router isis')) {
                 taskType = 'isis';
                 taskParams = parseIsisParams(lines);
-                console.log('  Тип: isis');
             } else if (joinedLines.includes('spanning-tree')) {
-                if (joinedLines.includes('rapid')) {
-                    taskType = 'rstp';
-                } else {
-                    taskType = 'stp';
-                }
+                taskType = joinedLines.includes('rapid') ? 'rstp' : 'stp';
                 taskParams = parseStpParams(lines);
-                console.log('  Тип: stp/rstp');
             } else if (joinedLines.includes('interface')) {
                 taskType = 'interface_config';
                 taskParams = parseInterfaceParams(lines);
-                console.log('  Тип: interface');
             } else {
                 taskType = 'update_config';
                 taskParams = {
@@ -881,60 +865,55 @@ function parsePlaybookTasks(tasksData) {
                     save: task.ios_config.save || true,
                     match: task.ios_config.match || 'line'
                 };
-                console.log('  Тип: update_config');
             }
         } else if (task.ios_vlan) {
             taskType = 'vlan';
             taskParams = task.ios_vlan || {};
-            console.log('  Тип: vlan');
         } else if (task.ios_command) {
-            taskType = 'backup_config';
+            taskType = 'custom_command';
             taskParams = {
-                destination: task.destination || '/backups',
-                compress: false
+                commands: (task.ios_command.commands || []).join('\n'),
+                export_output: false
             };
-            console.log('  Тип: backup_config');
-        } else {
-            console.log('  Неизвестный тип задачи:', task);
-            return;
         }
         
         if (taskType) {
-            const taskConfig = tasksConfig[taskType] || {
+            const taskConfig = TASKS_CONFIG[taskType] || {
                 icon: 'bi-gear',
                 color: 'secondary'
             };
             
-            const newTask = {
-                id: taskIdCounter++,
-                type: taskType,
-                name: taskName,
-                icon: taskConfig.icon,
-                color: taskConfig.color,
-                params: taskParams
-            };
-            
-            if (targetHost) {
-                // Задача для конкретного хоста
-                if (!hostTasks[targetHost]) {
-                    hostTasks[targetHost] = [];
+            // Проверяем, есть ли условие для конкретного хоста
+            if (task.when && task.when.includes('inventory_hostname')) {
+                const match = task.when.match(/inventory_hostname == '([^']+)'/);
+                if (match) {
+                    const host = match[1];
+                    if (!hostTasks[host]) {
+                        hostTasks[host] = [];
+                    }
+                    hostTasks[host].push({
+                        id: taskIdCounter++,
+                        type: taskType,
+                        name: taskName,
+                        icon: taskConfig.icon,
+                        color: taskConfig.color,
+                        params: taskParams
+                    });
                 }
-                hostTasks[targetHost].push(newTask);
-                console.log(`  Добавлена задача для хоста ${targetHost}: ${taskName} (${taskType})`);
             } else {
-                // Общая задача
-                tasks.push(newTask);
-                console.log(`  Добавлена общая задача: ${taskName} (${taskType})`);
+                tasks.push({
+                    id: taskIdCounter++,
+                    type: taskType,
+                    name: taskName,
+                    icon: taskConfig.icon,
+                    color: taskConfig.color,
+                    params: taskParams
+                });
             }
         }
     });
     
-    console.log(`После парсинга: ${tasks.length} общих задач, задач для ${Object.keys(hostTasks).length} хостов`);
-    
-    // Принудительно отображаем задачи
     renderTasks();
-    
-    // Обновляем предпросмотр
     triggerYamlUpdate();
 }
 
@@ -1059,6 +1038,7 @@ function parsePlaybookTargets(playbookData) {
 }
 
 // Сохранение плейбука
+// Сохранение плейбука
 function savePlaybook() {
     const name = document.getElementById('playbookName').value.trim();
     const description = document.getElementById('playbookDescription').value.trim();
@@ -1081,37 +1061,28 @@ function savePlaybook() {
         if (pattern) {
             target = pattern;
         } else if (selectedTargets.size > 0) {
-            target = Array.from(selectedTasks).join(':');
+            target = Array.from(selectedTargets).join(':');
         } else {
             showAlert('Выберите целевые устройства или укажите паттерн', 'warning');
             return;
         }
     }
     
-    // Формируем данные плейбука для сохранения
-    const playbookTasks = [];
+    // Подготавливаем задачи без метаданных
+    const commonTasks = tasks.map(task => ({
+        name: task.name,
+        type: task.type,
+        params: task.params
+    }));
     
-    // Добавляем общие задачи
-    tasks.forEach(task => {
-        playbookTasks.push(createTaskItem(task));
-    });
-    
-    // Добавляем задачи для конкретных хостов с условиями
+    const perHostTasks = {};
     for (const [host, hostTaskList] of Object.entries(hostTasks)) {
-        hostTaskList.forEach(task => {
-            const taskItem = createTaskItem(task);
-            taskItem.when = `inventory_hostname == '${host}'`;
-            playbookTasks.push(taskItem);
-        });
+        perHostTasks[host] = hostTaskList.map(task => ({
+            name: task.name,
+            type: task.type,
+            params: task.params
+        }));
     }
-    
-    const playbookData = [{
-        name: description || `Playbook: ${name}`,
-        hosts: target,
-        gather_facts: true,
-        connection: 'network_cli',
-        tasks: playbookTasks
-    }];
     
     const saveBtn = document.querySelector('button[onclick="savePlaybook()"]');
     const originalText = saveBtn.innerHTML;
@@ -1124,8 +1095,8 @@ function savePlaybook() {
         body: JSON.stringify({
             name: name,
             description: description,
-            tasks: tasks,
-            host_tasks: hostTasks,
+            tasks: commonTasks,
+            host_tasks: perHostTasks,
             hosts: target
         })
     })
@@ -1151,111 +1122,11 @@ function savePlaybook() {
 
 // Вспомогательная функция для создания задачи
 function createTaskItem(task) {
-    const taskItem = {
-        name: task.name
+    return {
+        name: task.name,
+        type: task.type,
+        params: task.params
     };
-    
-    switch(task.type) {
-        case 'ping':
-            taskItem.ping = {};
-            if (task.params.count) taskItem.ping.count = parseInt(task.params.count);
-            if (task.params.size) taskItem.ping.size = parseInt(task.params.size);
-            break;
-            
-        case 'interface_config':
-            taskItem.ios_config = {
-                lines: [
-                    `interface ${task.params.interface || 'GigabitEthernet0/1'}`
-                ]
-            };
-            if (task.params.description) {
-                taskItem.ios_config.lines.push(` description ${task.params.description}`);
-            }
-            if (task.params.ip_address) {
-                taskItem.ios_config.lines.push(` ip address ${task.params.ip_address}`);
-            }
-            if (task.params.admin_state) {
-                taskItem.ios_config.lines.push(` ${task.params.admin_state === 'up' ? 'no shutdown' : 'shutdown'}`);
-            }
-            break;
-            
-        case 'ospf':
-            taskItem.ios_config = {
-                lines: [
-                    `router ospf ${task.params.process_id || 1}`
-                ]
-            };
-            if (task.params.router_id) {
-                taskItem.ios_config.lines.push(` router-id ${task.params.router_id}`);
-            }
-            if (task.params.network) {
-                taskItem.ios_config.lines.push(` network ${task.params.network}`);
-            }
-            break;
-            
-        case 'isis':
-            taskItem.ios_config = {
-                lines: ['router isis']
-            };
-            if (task.params.net) {
-                taskItem.ios_config.lines.push(` net ${task.params.net}`);
-            }
-            if (task.params.level) {
-                taskItem.ios_config.lines.push(` is-type ${task.params.level}`);
-            }
-            break;
-            
-        case 'stp':
-        case 'rstp':
-            taskItem.ios_config = {
-                lines: []
-            };
-            if (task.params.mode) {
-                taskItem.ios_config.lines.push(`spanning-tree mode ${task.params.mode}`);
-            }
-            if (task.params.priority && task.params.vlan) {
-                taskItem.ios_config.lines.push(`spanning-tree vlan ${task.params.vlan} priority ${task.params.priority}`);
-            }
-            if (task.params.root_primary) {
-                taskItem.ios_config.lines.push(`spanning-tree vlan ${task.params.vlan || 1} root primary`);
-            }
-            if (task.params.portfast) {
-                taskItem.ios_config.lines.push('spanning-tree portfast default');
-            }
-            if (task.params.bpduguard) {
-                taskItem.ios_config.lines.push('spanning-tree portfast bpduguard default');
-            }
-            break;
-            
-        case 'vlan':
-            taskItem.ios_vlan = {
-                vlan_id: parseInt(task.params.vlan_id) || 10,
-                name: task.params.name || 'VLAN',
-                state: task.params.state || 'active'
-            };
-            if (task.params.interfaces) {
-                taskItem.ios_vlan.interfaces = task.params.interfaces.split(',').map(i => i.trim());
-            }
-            break;
-            
-        case 'update_config':
-            if (task.params.lines) {
-                taskItem.ios_config = {
-                    lines: task.params.lines.split('\n').filter(l => l.trim()),
-                    parents: task.params.parents ? [task.params.parents] : [],
-                    save: task.params.save || true,
-                    match: task.params.match || 'line'
-                };
-            }
-            break;
-            
-        default:
-            taskItem.debug = {
-                msg: `Task: ${task.type}`
-            };
-    }
-    
-    return taskItem;
 }
 
 // Валидация плейбука
